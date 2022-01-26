@@ -62,7 +62,12 @@ def log_packet(pkt):
         except:
             return
 
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": float(pkt.frame_info.time_epoch), "identifier": icmp_id}}
+        try:
+            epoch = float(pkt.frame_info.time_epoch)
+        except:
+            return
+
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
 
         packets = []
         packets.append(pkt_entry)
@@ -72,6 +77,6 @@ def log_packet(pkt):
 
 
         
-pipecap.apply_on_packets(log_packet, timeout=1000)
+pipecap.apply_on_packets(log_packet)
 
 

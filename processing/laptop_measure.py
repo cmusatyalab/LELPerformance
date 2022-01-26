@@ -27,10 +27,6 @@ def log_packet(pkt):
 
     if "TCP" in pkt:
 
-        # Skip the packet if not related to xran or epc
-        if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
-            return
-
         try:
             tcp_timestamp = pkt.tcp.options_timestamp_tsval
         except:
@@ -64,7 +60,12 @@ def log_packet(pkt):
         except:
             return
 
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": float(pkt.frame_info.time_epoch), "identifier": icmp_id}}
+        try:
+            epoch = float(pkt.frame_info.time_epoch)
+        except:
+            return
+
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
 
         packets = []
         packets.append(pkt_entry)
@@ -74,6 +75,6 @@ def log_packet(pkt):
 
 
         
-pipecap.apply_on_packets(log_packet, timeout=1000)
+pipecap.apply_on_packets(log_packet)
 
 

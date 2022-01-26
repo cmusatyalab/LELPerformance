@@ -31,9 +31,6 @@ def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
     uplink_values = []
     downlink_values = []
 
-    # Default to returning None (will preserve behavior on next call)
-    new_timestamp = None
-
     # Note that the query occurs in reverse order
     for entry in entries:
 
@@ -131,6 +128,35 @@ def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, 
 
     return uplink_segments, downlink_segments, (cloudlet_timestamp_retrieved, xran_timestamp_retrieved, epc_timestamp_retrieved, ue_timestamp_retrieved)
 
+# Create client to be used for writing to segmentation DB
+SEGMENTATION_DB = 'segmentation'
+segmentation_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEGMENTATION_DB)
+segmentation_client.alter_retention_policy("autogen", database=SEGMENTATION_DB, duration="30d", default=True)
+
+def upload_measurements(df, is_uplink):
+  packets = []
+  count = 0
+  for _, row in df.iterrows():
+  
+    # Create new entry to write to segmentation database
+    if (is_uplink):
+      pkt_entry = {"measurement":"uplink", "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], "epc_cloudlet": row['epc_cloudlet']}}
+    else:
+      pkt_entry = {"measurement":"downlink", "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], "epc_cloudlet": row['epc_cloudlet']}}
+
+
+    # Handle potential synchronization error 
+    if (row['ue_xran'] < 0) or (row['xran_epc'] < 0) or (row['epc_cloudlet'] < 0):
+        print("Potential synchronization error. Segment has latencies: %f %f %f" % (row['ue_xran'], row['xran_epc'], row['epc_cloudlet']))
+        continue
+
+    packets.append(pkt_entry)
+    print(count)
+    segmentation_client.write_points(packets)
+    packets.clear()
+
+    count += 1
+
 cloudlet_timestamp = None
 xran_timestamp = None
 epc_timestamp = None
@@ -144,7 +170,6 @@ while (True):
     # Irrelevant what we specify for UE src address (filtered out since changes each session)
     ue_measurements = retrieve_timestamp(ue_icmp_client, '192.168.25.57', '128.2.208.248', 2000, True, ue_timestamp)
 
-    # Updates the timestamps as globals
     uplink_segments, downlink_segments, timestamps = join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, ue_measurements)
 
     # Set the timestamps to updated values (if join was successful)
@@ -153,5 +178,12 @@ while (True):
       xran_timestamp = timestamps[1]
       epc_timestamp = timestamps[2]
       ue_timestamp = timestamps[3]
+
+    print(len(uplink_segments))
+    print(len(downlink_segments))
+
+    # Upload results to segmentation database
+    upload_measurements(uplink_segments, True)
+    upload_measurements(downlink_segments, False)
 
     time.sleep(5)
