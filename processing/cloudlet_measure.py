@@ -12,18 +12,27 @@ CLOUDLET_PORT = 8086
 TCP_DB = 'cloudlettcp'
 ICMP_DB = 'cloudleticmp'
 
+# Initialize clients to access Cloudlet TCP and ICMP databases
+
 tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
 tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
 
 icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
 icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
 
+# Receive input from STDIN (piped on terminal)
 pipecap = PipeCapture(pipe=sys.stdin, debug=True)
 
 # Acceptable IP addresses to track at cloudlet
 IP_ADDR = ['128.2.208.248', '128.2.212.53']
 
 def log_packet(pkt):
+    """
+    Routine to execute for each packet received on the interface STDIN
+
+    Extracts fields needed to correlate packets across each probe and insert into
+    TCP or ICMP database
+    """
 
     if "TCP" in pkt:
 

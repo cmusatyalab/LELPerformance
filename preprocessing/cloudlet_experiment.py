@@ -10,6 +10,7 @@ from influxdb import InfluxDBClient
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
+# InfluxDB table name
 DB = 'experimentcloudlet'
 
 client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DB)

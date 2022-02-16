@@ -18,6 +18,7 @@ tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", de
 icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
 icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
 
+# Filter for cloudlet packets to limit traffic to parse
 pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
 
 # Acceptable IP addresses to track for xran or epc
@@ -25,6 +26,12 @@ pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128
 IP_ADDR = ['192.168.25.4', '192.168.25.2', '128.2.208.248']
 
 def log_packet(pkt):
+    """
+    Routine to execute for each packet received on the interface STDIN
+
+    Extracts fields needed to correlate packets across each probe and insert into
+    TCP or ICMP database
+    """
 
     if "TCP" in pkt:
 

@@ -1,6 +1,12 @@
 """
-Routines to compute the latency of each segment from the stored DB values
+Contains routine to compute each segment latency using stored fields for each probe. 
+Correlates the packets at each probe in real time, computes latency and uploads results
+into uplink and downlink databases. 
+
+This file only contains the correlation script for ICMP data. The corresponding TCP 
+file should be located in Google Drive on Google CoLab.
 """
+
 from influxdb import InfluxDBClient
 import numpy as np
 import pandas as pd
@@ -12,6 +18,7 @@ import time
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
+# Obtain clients for ICMP databases
 CLOUDLET_ICMP_DB = 'cloudleticmp'
 WATERSPOUT_ICMP_DB = 'waterspouticmp'
 UE_ICMP_DB = 'ueicmp'
@@ -21,6 +28,33 @@ waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, da
 ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
 
 def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
+    """
+    Routine to obtain database entries that occurred after last retrieved timestamp (ensures we
+    only obtain the most recent packets and not packets that have already been correlated and 
+    inserted into the DB)
+
+    Inputs
+
+      client: InfluxDB client corresponding to ICMP database to retrieve stored packets from
+
+      src: the source IP address to filter for in packets
+
+      dst: the destination IP address to filter for in packets
+
+      limit: number of packets to retrieve from function call
+
+      is_ue: if retrieval corresponds to UE packets received. Necessary since src IP address varies
+        depending on call, so we cannot use the source to identify whether packet comes from UE
+
+      timestamp: timestamp to ensure we retrieve only packets more recent than this provided value
+
+    Return
+
+      Tuple of uplink and downlink packets received (each packet is stored in list format of relevant fields)
+
+    """
+
+    # Filter based on timestamp if first iteration (else field will be None)
     if timestamp is not None:
       query = "SELECT src, dst, data_time, identifier, epoch FROM latency WHERE time > '%s' ORDER BY time DESC LIMIT %s" % (timestamp, limit)
     else: 
@@ -31,11 +65,11 @@ def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
     uplink_values = []
     downlink_values = []
 
-    # Note that the query occurs in reverse order
+    # For each retrieved field, extract the fields necessary to correlate packets and convert epoch time to milliseconds
     for entry in entries:
 
       if (is_ue):
-        # Changing UE src destination so disregard that value
+        # Changing UE src destination so disregard that value if for UE, cannot use to identify
         if (entry['dst'] == dst):
           uplink_values.append([entry['data_time'], entry['identifier'], (entry['epoch'] * 1000), entry['time']])
 
@@ -53,8 +87,27 @@ def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
 
 
 def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, ue_measurements):
-    # Extract uplink, downlink dataframes from input tuples and convert into dataframes
+    """
+    Routine to correlate packets from the UE, XRAN, EPC and Cloudlet probes by using JOIN on identical fields
 
+    Inputs
+
+      cloudlet_measurements: list of packets retrieved from cloudlet probe to correlate
+
+      xran_measurements: list of packets retrieved from xran probe (waterspout) to correlate
+
+      epc_measurements: list of packets retrieved from epc probe (waterspout) to correlate
+
+      ue_measurements: list of packets retrieved from UE to correlate
+
+    Return
+
+      Uplink and downlink segment latency values, as well as timestamp of most recent packet retrieved 
+      from each probe
+
+    """
+
+    # Convert uplink and downlink packets into dataframes
     cloudlet_uplink_df = pd.DataFrame(cloudlet_measurements[0], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
     cloudlet_uplink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
     cloudlet_downlink_df = pd.DataFrame(cloudlet_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
@@ -75,6 +128,8 @@ def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, 
     ue_downlink_df = pd.DataFrame(ue_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
     ue_downlink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
 
+
+    # Correlate packets by joining on ICMP timestamp and ICMP identifier
     xran_epc_uplink_df = pd.merge(
         left=xran_uplink_df, right=epc_uplink_df, how='inner', on=['Data Time', 'Identifier']
     )
@@ -96,6 +151,8 @@ def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, 
     uplink_df.rename(columns={"Epoch":"ue_time"}, inplace=True)
     uplink_segments = pd.concat([(uplink_df['xran_time'] - uplink_df['ue_time']), (uplink_df['epc_time'] - uplink_df['xran_time']), (uplink_df['cloudlet_time'] - uplink_df['epc_time'])], axis=1, keys=['ue_xran', 'xran_epc', 'epc_cloudlet'])
 
+
+    # Repeat steps for downlink
     xran_epc_downlink_df = pd.merge(
         left=xran_downlink_df, right=epc_downlink_df, how='inner', on=['Data Time', 'Identifier']
     )
@@ -120,7 +177,7 @@ def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, 
 
     downlink_segments = pd.concat([(downlink_df['ue_time'] - downlink_df['xran_time']), (downlink_df['xran_time'] - downlink_df['epc_time']), (downlink_df['epc_time'] - downlink_df['cloudlet_time'])], axis=1, keys=['ue_xran', 'xran_epc', 'epc_cloudlet'])
 
-    # Update the timestamps to query based on latest downlink timestamps
+    # Update the timestamps to query next iteration based on latest downlink timestamps correlated
     cloudlet_timestamp_retrieved = downlink_df['cloudlet_timestamp'].max()
     xran_timestamp_retrieved = downlink_df['xran_timestamp'].max()
     epc_timestamp_retrieved = downlink_df['epc_timestamp'].max()
@@ -128,12 +185,26 @@ def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, 
 
     return uplink_segments, downlink_segments, (cloudlet_timestamp_retrieved, xran_timestamp_retrieved, epc_timestamp_retrieved, ue_timestamp_retrieved)
 
-# Create client to be used for writing to segmentation DB
+# Create client to be used for writing to segmentation DB (DB where we store the computed segment latencies)
 SEGMENTATION_DB = 'segmentation'
 segmentation_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEGMENTATION_DB)
 segmentation_client.alter_retention_policy("autogen", database=SEGMENTATION_DB, duration="30d", default=True)
 
 def upload_measurements(df, is_uplink):
+  """ 
+  Routine to store computed segment latency values to 'segmentation' database. Maintains
+  separate measurements for uplink and downlink
+
+  Inputs
+    df: dataframe containing the segment latencies in each row
+
+    is_uplink: true if corresponds to uplink dataframe, else false
+
+  Return
+
+    None
+
+  """
   packets = []
   count = 0
   for _, row in df.iterrows():
@@ -150,6 +221,8 @@ def upload_measurements(df, is_uplink):
         print("Potential synchronization error. Segment has latencies: %f %f %f" % (row['ue_xran'], row['xran_epc'], row['epc_cloudlet']))
         continue
 
+
+    # Input uplink or downlink latencies into database
     packets.append(pkt_entry)
     print(count)
     segmentation_client.write_points(packets)
@@ -162,6 +235,8 @@ xran_timestamp = None
 epc_timestamp = None
 ue_timestamp = None
 
+# Iterates to continually retrieve most recent packets, correlate packets and 
+# upload resulting segment latencies to segmentation database
 while (True):
     cloudlet_measurements = retrieve_timestamp(cloudlet_icmp_client, '128.2.212.53', '128.2.208.248', 2000, False, cloudlet_timestamp)
     xran_measurements = retrieve_timestamp(waterspout_icmp_client, '192.168.25.2', '192.168.25.4', 2000, False, xran_timestamp)
@@ -186,4 +261,5 @@ while (True):
     upload_measurements(uplink_segments, True)
     upload_measurements(downlink_segments, False)
 
+    # Allow time to populate the probe databases
     time.sleep(5)
