@@ -40,9 +40,12 @@ icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", 
 
 if kwargs['fifo']:
     clfifo = os.open(FIFO_NAME, os.O_RDONLY) # Get from fifo
-    pipecap = PipeCapture(pipe=clfifo, debug=True)
+elif kwargs['filename'] is not None:
+    clfifo = open(kwargs['filename'], 'r')
 else:
-    pipecap = PipeCapture(pipe=sys.stdin, debug=True) # Get from stdin
+    clfifo = sys.stdin
+    
+pipecap = PipeCapture(pipe=clfifo, debug=True) # Get from stdin
 
 # Acceptable IP addresses to track at cloudlet
 IP_ADDR = ['128.2.208.248', '128.2.212.53','172.26.25.174']

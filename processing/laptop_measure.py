@@ -1,17 +1,38 @@
-import pyshark
 import time
 import sys
+import os
+
+devnull = [print(pth) for pth in sys.path]
+import pyshark
 from pyshark.capture.pipe_capture import PipeCapture
 
-# InfluxDB related initialization
+
 from influxdb import InfluxDBClient
+from optparse import OptionParser
 
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
 TCP_DB = 'uetcp'
 ICMP_DB = 'ueicmp'
+FIFO_NAME = 'uefifo'
 
+
+# Command line processing
+parser = OptionParser(usage="usage: %prog [options]")
+parser.add_option("-f", "--fifo",
+    action="store_true", dest="fifo", default=False,
+    help="Use a named pipe (fifo) instead of stdin")
+parser.add_option("-O", "--tcpoff",
+    action="store_true", dest="tcpoff", default=False,
+    help="Turn off tcp capture")
+parser.add_option("-F", "--filename", dest="filename",
+    help="take input from pcap file", metavar="FILE")
+
+(options,args) = parser.parse_args()
+kwargs = options.__dict__.copy()
+
+# InfluxDB related initialization
 tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
 tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
 
@@ -19,11 +40,19 @@ icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP
 icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
 
 # Filter for cloudlet packets to limit traffic to parse
-pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
+print(kwargs)
+if kwargs['fifo']:
+    uefifo = os.open(FIFO_NAME, os.O_RDONLY) # Get from fifo
+elif kwargs['filename'] is not None:
+    uefifo = open(kwargs['filename'], 'r')
+else:
+    uefifo = sys.stdin
+
+pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == 128.2.208.248")
 
 # Acceptable IP addresses to track for UE or cloudlet
-IP_ADDR = ['192.168.25.52', '128.2.208.248']
-
+IP_ADDR = ['192.168.25.52', '128.2.208.248','172.26.25.174']
+print(sys.path)
 def log_packet(pkt):
     """
     Routine to execute for each packet received on the interface STDIN
@@ -32,8 +61,8 @@ def log_packet(pkt):
     TCP or ICMP database
     """
 
-    if "TCP" in pkt:
-
+    if "TCP" in pkt and not kwargs['tcpoff']:
+        print("logging TCP packet")
         try:
             tcp_timestamp = pkt.tcp.options_timestamp_tsval
         except:
@@ -44,7 +73,6 @@ def log_packet(pkt):
         except:
             tcp_ack = 0
 
-        
         # Adjust the packets if XRAN -> EPC packet
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"seqnum": int(pkt.tcp.seq_raw), "timestamp": int(tcp_timestamp), "acknum": float(tcp_ack), "epoch": float(pkt.frame_info.time_epoch)}}
 
@@ -56,10 +84,11 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-
+        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
+            print("No Timestamp")
             return
 
         try:
@@ -73,15 +102,13 @@ def log_packet(pkt):
             return
 
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
-
+        print(pkt_entry)
         packets = []
         packets.append(pkt_entry)
 
         # Write to ICMP database
         icmp_client.write_points(packets)
 
-
-        
 pipecap.apply_on_packets(log_packet)
 
 
