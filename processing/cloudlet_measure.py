@@ -22,10 +22,12 @@ FIFO_NAME = 'clfifo'
 parser = OptionParser(usage="usage: %prog [options]")
 parser.add_option("-f", "--fifo",
     action="store_true", dest="fifo", default=False,
-    help="Use a named pipe (fifo) instead of stdin")
+    help="Take input from named pipe (fifo) instead of stdin")
 parser.add_option("-O", "--tcpoff",
     action="store_true", dest="tcpoff", default=False,
     help="Turn off tcp capture")
+parser.add_option("-F", "--filename", dest="filename",
+    help="take input from pcap file instead of stdin", metavar="FILE")
 
 (options,args) = parser.parse_args()
 kwargs = options.__dict__.copy()
