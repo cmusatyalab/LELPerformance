@@ -2,7 +2,7 @@ import time
 import sys
 import os
 
-devnull = [print(pth) for pth in sys.path]
+# devnull = [print(pth) for pth in sys.path]
 import pyshark
 from pyshark.capture.pipe_capture import PipeCapture
 
@@ -15,7 +15,7 @@ CLOUDLET_PORT = 8086
 
 TCP_DB = 'uetcp'
 ICMP_DB = 'ueicmp'
-FIFO_NAME = 'uefifo'
+FIFO_NAME = './uefifo'
 
 
 # Command line processing
@@ -48,11 +48,11 @@ elif kwargs['filename'] is not None:
 else:
     uefifo = sys.stdin
 
-pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == 128.2.208.248")
+pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == {}".format(CLOUDLET_IP))
 
 # Acceptable IP addresses to track for UE or cloudlet
-IP_ADDR = ['192.168.25.52', '128.2.208.248','172.26.25.174']
-print(sys.path)
+IP_ADDR = ['192.168.25.52', CLOUDLET_IP,'172.26.25.174']
+
 def log_packet(pkt):
     """
     Routine to execute for each packet received on the interface STDIN
@@ -62,7 +62,7 @@ def log_packet(pkt):
     """
 
     if "TCP" in pkt and not kwargs['tcpoff']:
-        print("logging TCP packet")
+        # print("logging TCP packet")
         try:
             tcp_timestamp = pkt.tcp.options_timestamp_tsval
         except:
@@ -88,11 +88,13 @@ def log_packet(pkt):
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
-            print("No Timestamp")
-            return
+            icmp_timestamp = 0
+            # print("No Timestamp")
+            # return
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
+            icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
         except:
             return
 
@@ -100,9 +102,16 @@ def log_packet(pkt):
             epoch = float(pkt.frame_info.time_epoch)
         except:
             return
+        
+        try:
+            icmp_humantime = str(pkt.frame_info.time)
+        except:
+            return
 
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
-        print(pkt_entry)
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
+                    "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
+        # print(pkt_entry)
         packets = []
         packets.append(pkt_entry)
 
