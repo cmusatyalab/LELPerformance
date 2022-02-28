@@ -102,14 +102,20 @@ def log_packet(pkt):
             icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
         except:
             return
+        
         try:
             epoch = float(pkt.frame_info.time_epoch)
+        except:
+            return
+        
+        try:
+            icmp_humantime = str(pkt.frame_info.time)
         except:
             return
 
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
-                               "identifier": icmp_id, "sequence": icmp_seq}}
+                               "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
         # print(pkt_entry)
         packets = []
         packets.append(pkt_entry)
