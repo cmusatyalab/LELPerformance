@@ -14,6 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import time
 
+
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
