@@ -73,6 +73,7 @@ def log_packet(pkt):
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
+            icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
         except:
             return
 
@@ -81,9 +82,15 @@ def log_packet(pkt):
         except:
             return
         
-        print("2: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        try:
+            icmp_humantime = str(pkt.frame_info.time)
+        except:
+            return
+        
+        # print("2: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
-                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
+                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
+                               "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
 
         packets = []
         packets.append(pkt_entry)
