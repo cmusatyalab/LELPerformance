@@ -61,7 +61,7 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-
+        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
