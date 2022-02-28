@@ -2,6 +2,8 @@ import pyshark
 import time
 import sys
 import os
+import datetime
+
 from pyshark.capture.pipe_capture import PipeCapture
 
 # InfluxDB related initialization
@@ -53,6 +55,9 @@ pipecap = PipeCapture(pipe=clfifo, debug=True) # Get from stdin
 IP_ADDR = ['128.2.208.248', '128.2.212.53','172.26.25.174']
 
 def log_packet(pkt):
+    def timeconv(sstr):
+        return datetime.datetime.strptime(sstr, '%Y-%m-%d %H:%M:%S.%f') \
+            .strftime('%b %d, %Y %H:%M:%S.%f000 UTC')
     """
     Routine to execute for each packet received on the interface STDIN
 
@@ -83,27 +88,35 @@ def log_packet(pkt):
         packets.append(pkt_entry)
         # Write to TCP database
         tcp_client.write_points(packets)
-        
-
     elif "ICMP" in pkt:
-        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        # print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
+            print("Has data_time: {} frame_info.time: {} {} {}" \
+                  .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst))
         except:
-            return
+            # try:
+            #     icmp_timestamp = str(pkt.frame_info.time)
+            #     print("No data_time: {} frame_info.time: {} {} {}" \
+            #           .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst))
+            # except:
+            #     return
+            icmp_timestamp = "0"
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
+            icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
         except:
             return
-
         try:
             epoch = float(pkt.frame_info.time_epoch)
         except:
             return
 
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
-        print(pkt_entry)
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
+                               "identifier": icmp_id, "sequence": icmp_seq}}
+        # print(pkt_entry)
         packets = []
         packets.append(pkt_entry)
 
