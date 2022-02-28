@@ -95,12 +95,6 @@ def log_packet(pkt):
             print("Has data_time: {} frame_info.time: {} {} {}" \
                   .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst))
         except:
-            # try:
-            #     icmp_timestamp = str(pkt.frame_info.time)
-            #     print("No data_time: {} frame_info.time: {} {} {}" \
-            #           .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst))
-            # except:
-            #     return
             icmp_timestamp = "0"
 
         try:
