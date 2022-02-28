@@ -69,7 +69,7 @@ def log_packet(pkt):
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
-            return
+            icmp_timestamp = "0"
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
