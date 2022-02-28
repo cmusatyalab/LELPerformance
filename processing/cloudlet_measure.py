@@ -15,6 +15,8 @@ ECLIPSE_DEBUG = True
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
+UE_IP = '172.26.21.132'
+
 TCP_DB = 'cloudlettcp'
 ICMP_DB = 'cloudleticmp'
 FIFO_NAME = 'clfifo'
@@ -52,7 +54,7 @@ else:
 pipecap = PipeCapture(pipe=clfifo, debug=True) # Get from stdin
 
 # Acceptable IP addresses to track at cloudlet
-IP_ADDR = ['128.2.208.248', '128.2.212.53','172.26.25.174']
+IP_ADDR = [CLOUDLET_IP, UE_IP,'128.2.212.53']
 
 def log_packet(pkt):
     def timeconv(sstr):
@@ -88,8 +90,13 @@ def log_packet(pkt):
         packets.append(pkt_entry)
         # Write to TCP database
         tcp_client.write_points(packets)
+        
     elif "ICMP" in pkt:
-        # print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        
+        if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
+            return
+        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))        
+        
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
             print("Has data_time: {} frame_info.time: {} {} {}" \
