@@ -12,11 +12,14 @@ from optparse import OptionParser
 
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
+UE_IP = '192.168.25.4'
 
 TCP_DB = 'uetcp'
 ICMP_DB = 'ueicmp'
 FIFO_NAME = './uefifo'
 
+CMD = "..\WinDump -i 4 -w - -U -s 0 icmp |python laptop_measure.py"
+# Interface 4 when on JMA network with Multitech
 
 # Command line processing
 parser = OptionParser(usage="usage: %prog [options]")
@@ -51,7 +54,7 @@ else:
 pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == {}".format(CLOUDLET_IP))
 
 # Acceptable IP addresses to track for UE or cloudlet
-IP_ADDR = ['192.168.25.52', CLOUDLET_IP,'172.26.25.174']
+IP_ADDR = ['192.168.25.52', CLOUDLET_IP, UE_IP,'172.26.25.174']
 
 def log_packet(pkt):
     """
