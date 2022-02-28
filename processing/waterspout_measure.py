@@ -9,6 +9,8 @@ from influxdb import InfluxDBClient
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
+UE_IP = '192.168.25.4'
+
 TCP_DB = 'waterspouttcp'
 ICMP_DB = 'waterspouticmp'
 
@@ -23,7 +25,7 @@ pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128
 
 # Acceptable IP addresses to track for xran or epc
 # TODO: determine if 192.168.25.76 is ever present
-IP_ADDR = ['192.168.25.4', '192.168.25.2', '128.2.208.248']
+IP_ADDR = [UE_IP, '192.168.25.2', CLOUDLET_IP]
 
 def log_packet(pkt):
     """
@@ -51,7 +53,9 @@ def log_packet(pkt):
 
         
         # Adjust the packets if XRAN -> EPC packet
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"seqnum": int(pkt.tcp.seq_raw), "timestamp": int(tcp_timestamp), "acknum": float(tcp_ack), "epoch": float(pkt.frame_info.time_epoch)}}
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"seqnum": int(pkt.tcp.seq_raw), "timestamp": int(tcp_timestamp), 
+                               "acknum": float(tcp_ack), "epoch": float(pkt.frame_info.time_epoch)}}
 
         packets = []
         packets.append(pkt_entry)
@@ -61,7 +65,7 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        print("1: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
@@ -76,8 +80,10 @@ def log_packet(pkt):
             epoch = float(pkt.frame_info.time_epoch)
         except:
             return
-
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
+        
+        print("2: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
 
         packets = []
         packets.append(pkt_entry)
