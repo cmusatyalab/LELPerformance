@@ -68,30 +68,18 @@ def main():
     ''' Write to the segmentation database '''
     seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     tdfx[:].apply(writePkt,client = seg_client, axis=1)
-    
-    # ''' Read back and check for duplicates TODO make this a loop and check before write '''
-    # df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
-    # measure = 'uplink'
-    # seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
-    
-    
-    # measure = 'downlink'
-    # seg_dl_df = df_seg_client.query("select * from {}".format(measure))[measure]
-
-    # seqlst = list(set(seg_ul_df.sequence))
-    # tdfz = tdfx[~tdfx.sequence.isin(seqlst)]
 
     dumpdf(tdfx)
 
 def getLatencyData():
     ''' Get all the clients '''
-    cloudlet_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
+    # cloudlet_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
     df_cloudlet_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
     
-    waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
+    # waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
     df_waterspout_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
     
-    ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+    # ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
     df_ue_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
                                         
     ''' Query the different network nodes' data '''
@@ -111,13 +99,16 @@ def getLatencyData():
     for tup in dflst:
         tdfx = tup[0]
         tdfx['NAME'] = tup[1]
-        tdfx['TIMESTAMP']= pd.to_datetime(tdfx['epoch'],unit='s',utc=True) # convenience
-        tdfx[['direction','STEP','LEGNAME']] = tdfx.apply(lookupLeg,axis=1, result_type='expand')
-        tdfx = renamecol(tdfx.reset_index().copy(),col='index',newname='influxts')
+        # tdfx['TIMESTAMP']= pd.to_datetime(tdfx['epoch'],unit='s',utc=True) # convenience
+        # tdfx[['direction','STEP','LEGNAME']] = tdfx.apply(lookupLeg,axis=1, result_type='expand')
+        # tdfx = renamecol(tdfx.reset_index().copy(),col='index',newname='influxts')
         tdfy = tdfy.append(tdfx)
     
     ''' Only keep sequences that are in all three dataframes '''
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
+    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
     
     return tdfy
 
