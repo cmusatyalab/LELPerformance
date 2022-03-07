@@ -7,13 +7,14 @@ This file only contains the correlation script for ICMP data. The corresponding 
 file should be located in Google Drive on Google CoLab.
 """
 
-from influxdb import InfluxDBClient
+from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import time
-
+from pyutils import *
+from pdutils import *
 
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
@@ -25,8 +26,19 @@ WATERSPOUT_ICMP_DB = 'waterspouticmp'
 UE_ICMP_DB = 'ueicmp'
 
 cloudlet_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
+df_cloudlet_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
+
 waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
+df_waterspout_icmp = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
+
 ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+df_ue_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+
+measure = 'latency'
+cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))['latency']
+dumpdf(cloudlet_icmp_df)
+waterspout_icmp_df = df_waterspout_icmp_client.query("select * from {}".format(measure))['latency']
+ue_icmp_df = ue_icmp_client.query("select * from {}".format(measure))['latency']
 
 def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
     """
