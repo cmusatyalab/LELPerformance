@@ -29,57 +29,57 @@ legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
            7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
 
 def main():
-    latencydf = getLatencyData()
-   
-    ''' Group the sequences and clean up '''
-    tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
-    # Make a small df that has just the number of times a sequence appears in the df
-    tdfz = renamecol(tdfz.groupby(by='sequence') \
-            .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
-    # Join the small df with bigger
-    tdfz = tdfz.set_index('sequence').join(latencydf.set_index('sequence')) \
-            .reset_index().sort_values(['sequence','STEP'])
-    tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
+    while True:
+        latencydf = getLatencyData()
+        latencydf = checkAgainstCurrent(latencydf)
+        if len(latencydf) == 0:
+            print("No measurements available for the segmentation database")
+            time.sleep(5)
+            continue
+        ''' Group the sequences and clean up '''
+        tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
+        # Make a small df that has just the number of times a sequence appears in the df
+        tdfz = renamecol(tdfz.groupby(by='sequence') \
+                .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
+        # Join the small df with bigger
+        tdfz = tdfz.set_index('sequence').join(latencydf.set_index('sequence')) \
+                .reset_index().sort_values(['sequence','STEP'])
+        tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
+        
+        tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
+        
+        ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
+        tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
+        tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
+        
+        ''' Convert for storage in the segmentation database '''
+        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME']
+        tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
+                        .drop_duplicates().reset_index(drop=True)
+        tdfx = tdfx.pivot(index=['sequence','direction'], columns=['LEGNAME'], values=['DELTA']).reset_index()
+        tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
+        tdfx['start'] = tdfx.start.map(lambda col: col if not np.isnan(col) else 0)
+        tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
+        
+        ''' Write to the segmentation database '''
+        seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+        print("Writing {} measurements to the segmentation database".format(len(tdfx)))
+        tdfx[:].apply(writePkt,client = seg_client, axis=1)
+        
+
     
-    tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
-    
-    ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
-    tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
-    tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
-    
-    ''' Convert for storage in the segmentation database '''
-    keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME']
-    tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
-                    .drop_duplicates().reset_index(drop=True)
-    tdfx = tdfx.pivot(index=['sequence','direction'], columns=['LEGNAME'], values=['DELTA']).reset_index()
-    tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
-    tdfx['start'] = tdfx.start.map(lambda col: col if not np.isnan(col) else 0)
-    tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
-    dumpdf(tdfx)
-    
-    
-    ''' Now find what's already in the segmentation database -- may want to do this sooner for efficiency'''
+def checkAgainstCurrent(newdf):
     df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     measure = 'uplink'
     seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
     seqlst = list(set(seg_ul_df.sequence))
-    tdfx = tdfx[~tdfx.sequence.isin(seqlst)] # Drop if the sequence is already there -- don't write again
+    return newdf[~newdf.sequence.isin(seqlst)]
     
-    ''' Write to the segmentation database '''
-    seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
-    tdfx[:].apply(writePkt,client = seg_client, axis=1)
-
-    dumpdf(tdfx)
 
 def getLatencyData():
     ''' Get all the clients '''
-    # cloudlet_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
     df_cloudlet_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
-    
-    # waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
     df_waterspout_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
-    
-    # ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
     df_ue_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
                                         
     ''' Query the different network nodes' data '''
@@ -93,19 +93,18 @@ def getLatencyData():
         .intersection((set(cloudlet_icmp_df.sequence) \
         .intersection(set(waterspout_icmp_df.sequence)))))
     
-    ''' Combine the nodes and label the legs '''
+    ''' Combine the nodes '''
     dflst = [(cloudlet_icmp_df,'cloudlet'),(waterspout_icmp_df,'waterspout'),(ue_icmp_df,'ue')]
     tdfy = pd.DataFrame()
     for tup in dflst:
         tdfx = tup[0]
         tdfx['NAME'] = tup[1]
-        # tdfx['TIMESTAMP']= pd.to_datetime(tdfx['epoch'],unit='s',utc=True) # convenience
-        # tdfx[['direction','STEP','LEGNAME']] = tdfx.apply(lookupLeg,axis=1, result_type='expand')
-        # tdfx = renamecol(tdfx.reset_index().copy(),col='index',newname='influxts')
         tdfy = tdfy.append(tdfx)
     
     ''' Only keep sequences that are in all three dataframes '''
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+    
+    ''' Label the segments in what remains '''
     tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
     tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
     tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
