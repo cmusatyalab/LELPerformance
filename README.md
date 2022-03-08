@@ -22,6 +22,12 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 ```
 
+Note that the following command helps to filter out the overwhelming amount of TCP and SCTP traffic that are spurious if you're only interested in ICMP ping data:
+
+```
+ sudo tcpdump -s 0 -U -w - -i eno1 not tcp and not sctp | python3 waterspout_measure.py
+ ```
+
 ## Latency Segmentation Calculations
 We use the 'query_measurements.py' script to calculate segment latency from extracted fields for each probe and upload them to a separate database. The commands to run this script are: 
 
