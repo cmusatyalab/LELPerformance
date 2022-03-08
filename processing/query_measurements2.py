@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+
 sys.path.append("../lib")
 import os
 from influxdb import InfluxDBClient, DataFrameClient
@@ -13,6 +14,10 @@ from pyutils import *
 from pdutils import *
 from pdpltutils import *
 
+import simlogging
+from simlogging import mconsole
+
+LOGNAME=__name__
 
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
@@ -29,13 +34,24 @@ legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
            7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
 
 def main():
+    global logger
+    LOGFILE="query_measurments.log"
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = logging.INFO,coloron=False)
+
+    def noMeasurements(fdf):
+        if len(fdf) == 0:
+            mconsole("No measurements available for the segmentation database")
+            return True
+        else: return False
+    
+    firsttime = True
     while True:
+        if not firsttime: time.sleep(5)
+        firsttime = False
+        
         latencydf = getLatencyData()
         latencydf = checkAgainstCurrent(latencydf)
-        if len(latencydf) == 0:
-            print("No measurements available for the segmentation database")
-            time.sleep(5)
-            continue
+        if noMeasurements(latencydf): continue
         ''' Group the sequences and clean up '''
         tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
         # Make a small df that has just the number of times a sequence appears in the df
@@ -47,7 +63,7 @@ def main():
         tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
         
         tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
-        
+        if noMeasurements(tdfz): continue
         ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
         tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
@@ -58,15 +74,15 @@ def main():
                         .drop_duplicates().reset_index(drop=True)
         tdfx = tdfx.pivot(index=['sequence','direction'], columns=['LEGNAME'], values=['DELTA']).reset_index()
         tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
+        if noMeasurements(tdfx): continue
+        
         tdfx['start'] = tdfx.start.map(lambda col: col if not np.isnan(col) else 0)
         tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
         
         ''' Write to the segmentation database '''
         seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
-        print("Writing {} measurements to the segmentation database".format(len(tdfx)))
+        mconsole("Writing {} measurements to the segmentation database".format(len(tdfx)))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
-        
-
     
 def checkAgainstCurrent(newdf):
     df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
