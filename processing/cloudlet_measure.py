@@ -95,7 +95,7 @@ def log_packet(pkt):
         
         if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
             return
-        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))        
+        # print("1: CMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))    
         
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
@@ -119,7 +119,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-
+        print("2: CMP SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                                "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
