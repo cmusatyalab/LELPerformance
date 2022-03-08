@@ -1,3 +1,4 @@
+
 import time
 import sys
 import os
@@ -12,7 +13,7 @@ from optparse import OptionParser
 
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
-UE_IP = '192.168.25.4'
+UE_IP = '192.168.25.80'
 
 TCP_DB = 'uetcp'
 ICMP_DB = 'ueicmp'
@@ -43,7 +44,7 @@ icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP
 icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
 
 # Filter for cloudlet packets to limit traffic to parse
-print(kwargs)
+
 if kwargs['fifo']:
     uefifo = os.open(FIFO_NAME, os.O_RDONLY) # Get from fifo
 elif kwargs['filename'] is not None:
@@ -63,7 +64,6 @@ def log_packet(pkt):
     Extracts fields needed to correlate packets across each probe and insert into
     TCP or ICMP database
     """
-
     if "TCP" in pkt and not kwargs['tcpoff']:
         # print("logging TCP packet")
         try:
@@ -87,7 +87,7 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-        print("ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        # print("1: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
@@ -110,7 +110,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-
+        print("2: ICMP SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                     "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
