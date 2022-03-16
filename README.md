@@ -42,6 +42,14 @@ To store all values above, InfluxDB must be running on the Cloudlet. The Cloudle
 docker run -it -p 8086:8086 -v influxdb:/var/lib/influxdb influxdb:1.8
 ```
 
+## Grafana Dashboard
+To enable the grafana dashboard, grafana must be running on the Cloudlet. To run Grafana, run the following command on the Cloudlet:
+
+```
+docker run -d -p 3000:3000 grafana/grafana-enterprise
+```
+Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and import processing/dashboard.json. Within grafana, add a datasource for InfluxDB. In the datasource, use the IP or domain name of the Cloudlet, not *localhost*. Now, edit each of the panels in the dashboard to use that datasource. Even though the InfluxDB datasource is the default in the imported json, you need to reconnect the datasource to the dashboard for it to access the data.
+
 # OpenRTiST
 To run experiments with OpenRTiST (https://github.com/cmusatyalab/openrtist), for TCP measurements, run the following command on the cloudlet:
 
