@@ -21,8 +21,14 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 ```
+If using a Windows UE, you will need to install WinDump and run:
+```
+WinDump -i 4 -w - -U -s 0 icmp |python laptop_measure.py
+```
+Use *WinDump -D* to identify which interface number to use.
 
-Note that the following command helps to filter out the overwhelming amount of TCP and SCTP traffic that are spurious if you're only interested in ICMP ping data:
+
+Note that the following command helps to filter out the overwhelming amount of waterspout TCP and SCTP traffic on that are spurious if you're only interested in ICMP ping data:
 
 ```
  sudo tcpdump -s 0 -U -w - -i eno1 not tcp and not sctp | python3 waterspout_measure.py
