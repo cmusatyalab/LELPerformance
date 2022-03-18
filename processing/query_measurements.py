@@ -16,7 +16,10 @@ from pdpltutils import *
 
 import simlogging
 from simlogging import mconsole
-
+''' 
+    This program collects latency measurements from the UE, waterspout and cloudlet influxdb databases,
+    aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
+'''
 LOGNAME=__name__
 
 # Hardcode cloudlet IP and port for DB
@@ -67,9 +70,11 @@ def main():
         
         tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
         if noMeasurements(tdfz): continue
+        
         ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
         tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
+        '''RTT and STEPSUM should be the same; RTT is the (end - start) at the UE; STEPSUM is the sum of the DELTAS '''
         tdfz['RTT'] =  tdfz.epoch - tdfz.epoch.shift(7)
         tdfz['RTT'] = tdfz.apply(lambda row: row['RTT'] \
                         if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
@@ -147,9 +152,8 @@ def getLatencyData():
     
     return tdfy
 
-
 ''' Label the legs '''
-def lookupLeg(row): # TODO implement as dictionary
+def lookupLeg(row):
     src = row.src
     dst = row.dst
     name = row.NAME
