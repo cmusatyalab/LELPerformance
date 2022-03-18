@@ -43,13 +43,16 @@ def main():
             mconsole("No measurements available for the segmentation database")
             return True
         else: return False
-    
+    seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     firsttime = True
     while True:
         if not firsttime: time.sleep(5)
         firsttime = False
-        
-        latencydf = getLatencyData()
+        try:
+            latencydf = getLatencyData()
+        except:
+            mconsole("Did not get any latency data",level = "ERROR")
+            continue
         latencydf = checkAgainstCurrent(latencydf)
         if noMeasurements(latencydf): continue
         ''' Group the sequences and clean up '''
@@ -67,27 +70,44 @@ def main():
         ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
         tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
-        
+        tdfz['RTT'] =  tdfz.epoch - tdfz.epoch.shift(7)
+        tdfz['RTT'] = tdfz.apply(lambda row: row['RTT'] \
+                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
+        tdfz['STEPSUM'] = tdfz.DELTA.rolling(min_periods=1, window=7).sum()
+        tdfz['STEPSUM'] = tdfz.apply(lambda row: row['STEPSUM'] \
+                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
+
         ''' Convert for storage in the segmentation database '''
-        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME']
+        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
         tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
                         .drop_duplicates().reset_index(drop=True)
-        tdfx = tdfx.pivot(index=['sequence','direction'], columns=['LEGNAME'], values=['DELTA']).reset_index()
+
+        ''' Pivot the data '''
+        tdfx = tdfx.pivot(index=['sequence','direction','RTT','STEPSUM'], columns=['LEGNAME'], values=['DELTA']).reset_index()
+        ''' Get rid of multilevel index '''
         tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
         if noMeasurements(tdfx): continue
+        ''' Propagate the start time to the downlink '''
+        tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])        
+        tdfx['start'] = tdfx.start.fillna(method='ffill')
         
-        tdfx['start'] = tdfx.start.map(lambda col: col if not np.isnan(col) else 0)
+        ''' Cleanup the cloudlet processing time '''
         tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
         
         ''' Write to the segmentation database '''
-        seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+
+        tdfx = tdfx.dropna()
         mconsole("Writing {} measurements to the segmentation database".format(len(tdfx)))
+
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
     
 def checkAgainstCurrent(newdf):
     df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     measure = 'uplink'
-    seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
+    try:
+        seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
+    except:
+        return newdf
     seqlst = list(set(seg_ul_df.sequence))
     return newdf[~newdf.sequence.isin(seqlst)]
     
@@ -129,7 +149,7 @@ def getLatencyData():
 
 
 ''' Label the legs '''
-def lookupLeg(row):
+def lookupLeg(row): # TODO implement as dictionary
     src = row.src
     dst = row.dst
     name = row.NAME
@@ -160,7 +180,8 @@ def writePkt(row, client):
                  "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
                  "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], 
                             "epc_cloudlet": row['epc_cloudlet'], "start": row['start'],
-                            "cloudlet_proc": row['cloudlet_proc']}}
-    client.write_points([pkt_entry])
+                            "cloudlet_proc": row['cloudlet_proc'],
+                            'rtt':row.RTT,'stepsum':row.STEPSUM},"time":int(row['start']*1e6)}
+    client.write_points([pkt_entry], time_precision = 'u')
 
 if __name__ == '__main__': main()
