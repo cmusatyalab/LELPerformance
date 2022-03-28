@@ -30,7 +30,7 @@ CLOUDLET_PORT = 8086
 NTPSERVER = "0.north-america.pool.ntp.org"
 NTPSERVER = "north-america.pool.ntp.org"
 NTPSERVER = "labgw.elijah.cs.cmu.edu"
-BATCHSIZE = 10
+BATCHSIZE = 20
 DBNAME = 'winoffset'
 MEASURENAME = 'winoffset'
 
