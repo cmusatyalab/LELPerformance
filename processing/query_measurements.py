@@ -32,6 +32,7 @@ CLOUDLET_ICMP_DB = 'cloudleticmp'
 WATERSPOUT_ICMP_DB = 'waterspouticmp'
 UE_ICMP_DB = 'ueicmp'
 SEG_DB = 'segmentation'
+OFFSET_DB = 'winoffset'
 
 legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
            7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
@@ -83,18 +84,28 @@ def main():
                         if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
 
         ''' Convert for storage in the segmentation database '''
+        indlst = ['sequence','direction','RTT','STEPSUM']
+        # tdfz = tdfz.drop_duplicates(subset = indlst)
         keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
         tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
                         .drop_duplicates().reset_index(drop=True)
 
         ''' Pivot the data '''
-        tdfx = tdfx.pivot(index=['sequence','direction','RTT','STEPSUM'], columns=['LEGNAME'], values=['DELTA']).reset_index()
+        tdfx = tdfx.pivot(index=indlst, columns=['LEGNAME'], values=['DELTA']).reset_index()
+
         ''' Get rid of multilevel index '''
         tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
         if noMeasurements(tdfx): continue
         ''' Propagate the start time to the downlink '''
         tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])        
         tdfx['start'] = tdfx.start.fillna(method='ffill')
+        
+        ''' Find the offset '''
+        tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max())
+        ''' adjust the ue_xran latencies '''
+        tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
+                                            if row.direction == 'uplink' else row.ue_xran + row.offset, \
+                                            axis=1)
         
         ''' Cleanup the cloudlet processing time '''
         tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
@@ -152,6 +163,24 @@ def getLatencyData():
     
     return tdfy
 
+def getOffset(startts = None, endts = None, measure = 'winoffset'):
+    TZ = 'America/New_York'
+    df_offset_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=OFFSET_DB)
+    offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
+    ''' Filter by ts boundaries '''
+    tdfx = offset_df.copy()
+    ''' convert from epoch to datetime '''
+    startdt = datetime.datetime.fromtimestamp(startts,tz=pytz.timezone(TZ)) if startts is not None else None
+    enddt = datetime.datetime.fromtimestamp(endts,tz=pytz.timezone(TZ)) if endts is not None else None
+    ''' remove out of bounds '''
+    tdfx = tdfx[tdfx.TIMESTAMP >= startdt] if startts is not None else tdfx
+    tdfx = tdfx[tdfx.TIMESTAMP <= enddt] if endts is not None else tdfx
+    if len(tdfx) < len(offset_df):
+        mconsole("Filtered offset to boundaries: {} to {}".format(startdt,enddt))
+    median_offset = tdfx.offset.median()
+    return median_offset
+
+
 ''' Label the legs '''
 def lookupLeg(row):
     src = row.src
@@ -180,12 +209,16 @@ def lookupLeg(row):
 
 ''' Write into influxdb '''
 def writePkt(row, client):
-    pkt_entry = {"measurement":row['direction'], 
-                 "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
-                 "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], 
-                            "epc_cloudlet": row['epc_cloudlet'], "start": row['start'],
-                            "cloudlet_proc": row['cloudlet_proc'],
-                            'rtt':row.RTT,'stepsum':row.STEPSUM},"time":int(row['start']*1e6)}
-    client.write_points([pkt_entry], time_precision = 'u')
+    # try:
+        pkt_entry = {"measurement":row['direction'], 
+                     "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
+                     "fields":{"ue_xran": row['ue_xran'], 'ue_xran_adjust':row['ue_xran_adjust'],
+                               'offset':row['offset'],"xran_epc": row['xran_epc'], 
+                                "epc_cloudlet": row['epc_cloudlet'], "start": row['start'],
+                                "cloudlet_proc": row['cloudlet_proc'],
+                                'rtt':row.RTT,'stepsum':row.STEPSUM},"time":int(row['start']*1e6)}
+        client.write_points([pkt_entry], time_precision = 'u')
+    # except:
+    #     mconsole("Bad measurement: {}".format(row),level="ERROR")
 
 if __name__ == '__main__': main()
