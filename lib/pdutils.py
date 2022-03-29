@@ -103,7 +103,7 @@ def to_ts_dhm(idf,dcol,hcol,intcol=None, mincol=None,fmt="%m/%d/%Y %H:%M:%S"):
     return df.drop(columns=[tmphr,mincol,'dtstr'])
 
 def to_ts_std(df,**kwargs):
-    return to_ts(df,format = '%Y-%m-%d %H:%M:%S')
+    return to_ts(df,format = '%Y-%m-%d %H:%M:%S',**kwargs)
 
 def add_quarters(y,q,dq):
     dt = datetime.date(yr,qtrmap[qtr][0],1)
