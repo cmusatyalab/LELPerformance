@@ -26,7 +26,7 @@ LOGNAME=__name__
 CLOUDLET_IP = '128.2.208.248'
 EPC_IP = '192.168.25.4'
 CLOUDLET_PORT = 8086
-
+TZ = 'America/New_York'
 ''' Obtain clients for ICMP databases ''' 
 CLOUDLET_ICMP_DB = 'cloudleticmp'
 WATERSPOUT_ICMP_DB = 'waterspouticmp'
@@ -85,12 +85,13 @@ def main():
 
         ''' Convert for storage in the segmentation database '''
         indlst = ['sequence','direction','RTT','STEPSUM']
-        # tdfz = tdfz.drop_duplicates(subset = indlst)
+        
         keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
         tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
-                        .drop_duplicates().reset_index(drop=True)
+                        .reset_index(drop=True).drop_duplicates()
 
         ''' Pivot the data '''
+        tdfx = tdfx.drop_duplicates(subset = indlst + ['LEGNAME'])
         tdfx = tdfx.pivot(index=indlst, columns=['LEGNAME'], values=['DELTA']).reset_index()
 
         ''' Get rid of multilevel index '''
@@ -101,7 +102,8 @@ def main():
         tdfx['start'] = tdfx.start.fillna(method='ffill')
         
         ''' Find the offset '''
-        tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max())
+        # tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max())
+        tdfx['offset'] = getOffset()
         ''' adjust the ue_xran latencies '''
         tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
                                             if row.direction == 'uplink' else row.ue_xran + row.offset, \
@@ -157,7 +159,9 @@ def getLatencyData():
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
     
     ''' Label the segments in what remains '''
+    
     tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
     tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
     tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
     
