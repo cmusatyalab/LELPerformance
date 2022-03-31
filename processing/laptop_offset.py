@@ -8,6 +8,7 @@ sys.path.append("../lib")
 from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
+from optparse import OptionParser
 
 from pyutils import *
 from pdutils import *
@@ -47,20 +48,32 @@ def main():
     global logger
     LOGFILE="{}_offset.log".format(OSNAME)
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = logging.INFO,coloron=False)
+    (options,_) = cmdOptions()
+    kwargs = options.__dict__.copy()
     offset_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DBNAME)
+    mconsole("Starting offset measurements against {} with batchsize={}".format(NTPSERVER,kwargs['batchsize']))
     while True:
         ''' This command must be run as administrator '''
-        batch = getBatch()
+        batch = getBatch(batchsize = kwargs['batchsize'])
         batch = parseBatch(batch)
         mconsole("Writing {} offset measurements".format(len(batch)))
         batch.reset_index().apply(writeInfluxDB,client=offset_client, axis=1)
     pass
 
+def cmdOptions():
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-d", "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="Debugging mode")
+    parser.add_option("-B", "--batchsize", dest="batchsize", type = 'int',
+                  help="How many measurements per query", metavar="INT",default=BATCHSIZE)
+    return  parser.parse_args()
+
 def getBatch(ntpserver = NTPSERVER, batchsize = BATCHSIZE,output = False):
     ''' This command must be run as administrator '''
     cmdstr = "w32tm.exe /stripchart /computer:{} /samples:{}".format(ntpserver,batchsize)
     ret = cmd_all(cmdstr,output=output)
-    btch = ret['stdout'][-BATCHSIZE-1:-1] # Blank line at end
+    btch = ret['stdout'][-batchsize-1:-1] # Blank line at end
     return btch
 
 def parseBatch(btch,ntpserver = NTPSERVER):
