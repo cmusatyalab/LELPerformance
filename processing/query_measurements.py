@@ -140,6 +140,10 @@ def getLatencyData():
     measure = 'latency'
     cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))[measure]
     waterspout_icmp_df = df_waterspout_icmp_client.query("select * from {}".format(measure))[measure]
+    ''' Eliminate duplicate waterspout packets -- fix for XRAN double reporting with different epochs '''
+    waterspout_icmp_df = waterspout_icmp_df.groupby(by=['sequence','src','dst']).agg({'epoch':'min'}) \
+                .sort_values('epoch').reset_index()
+    
     ue_icmp_df = df_ue_icmp_client.query("select * from {}".format(measure))[measure]
     
     ''' Get list of sequences in all three dataframes '''
