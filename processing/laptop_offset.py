@@ -20,6 +20,8 @@ from simlogging import mconsole
 
 if os.name == 'nt':
     OSNAME='WINDOWS'
+elif os.name == 'posix':
+    OSNAME='LINUX'
 else:
     OSNAME='OTHER'
     
@@ -70,22 +72,43 @@ def cmdOptions():
     return  parser.parse_args()
 
 def getBatch(ntpserver = NTPSERVER, batchsize = BATCHSIZE,output = False):
-    ''' This command must be run as administrator '''
-    cmdstr = "w32tm.exe /stripchart /computer:{} /samples:{}".format(ntpserver,batchsize)
-    ret = cmd_all(cmdstr,output=output)
-    btch = ret['stdout'][-batchsize-1:-1] # Blank line at end
+    ''' This command must be run as administrator in windows '''
+    if OSNAME == 'WINDOWS':
+        cmdstr = "w32tm.exe /stripchart /computer:{} /samples:{}".format(ntpserver,batchsize)
+        ret = cmd_all(cmdstr,output=output)
+        btch = ret['stdout'][-batchsize-1:-1] # Blank line at end
+    elif OSNAME == 'LINUX':
+        cmdstr = "./chronyoffset.sh {} {}".format(ntpserver,batchsize)
+        ret = cmd_all(cmdstr,output=output)
+        btch = ret['stdout']
     return btch
 
 def parseBatch(btch,ntpserver = NTPSERVER):
     retdict = {}
     today = datetime.datetime.now().strftime('%Y-%m-%d')
-    for line in btch:
-        if 'error' in line: continue
-        o = float(offre.findall(line)[0][2:-1])
-        d = dtre.findall(line)[0][:-1]
-        ds = TZ.localize(datetime.datetime.strptime("{} {}".format(today,d),"%Y-%m-%d %H:%M:%S"))
-        retdict[ds] = o
-        pass
+    ''' Parse windows (w32tm /stripchart) '''
+    if OSNAME == "WINDOWS":
+        for line in btch:
+            if 'error' in line: continue
+            o = float(offre.findall(line)[0][2:-1])
+            d = dtre.findall(line)[0][:-1]
+            ds = TZ.localize(datetime.datetime.strptime("{} {}".format(today,d),"%Y-%m-%d %H:%M:%S"))
+            retdict[ds] = o
+            pass
+    elif OSNAME == "LINUX":
+        for line in btch:
+            lnlst = line.split()
+            if len(lnlst) < 9:
+                # mconsole("Bad offset line: {}".format(line),level="ERROR")
+                continue
+            o = lnlst[7]
+            if o.endswith("ns"): oo = float(o[:-2]) * 1e-9
+            elif o.endswith("us"): oo = float(o[:-2]) * 1e-6
+            elif o.endswith("ms"): oo = float(o[:-2]) * 1e-3
+            d = lnlst[0][:-6]
+            ds = TZ.localize(datetime.datetime.strptime(d,"%Y-%m-%dT%H:%M:%S"))
+            retdict[ds] = oo
+            pass
     retdf = pd.DataFrame.from_dict(retdict,orient='index',columns=['OFFSET'])
     retdf.index.name = 'TIMESTAMP'
     retdf['NTPSERVER'] = ntpserver
@@ -95,7 +118,7 @@ def parseBatch(btch,ntpserver = NTPSERVER):
 def writeInfluxDB(row,client = None):
     
     pkt_entry = {"measurement":MEASURENAME,
-                 "tags": {"ntpserver": row['NTPSERVER'],'TIMESTAMP':row.TIMESTAMP}, 
+                 "tags": {"ntpserver": row['NTPSERVER'],'TIMESTAMP':row.TIMESTAMP,'ostype':OSNAME}, 
                  "fields":{"offset": row['OFFSET']},"time":int(row.TIMESTAMP.timestamp())}
     client.write_points([pkt_entry], time_precision = 's')
 
