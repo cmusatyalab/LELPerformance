@@ -14,6 +14,7 @@ from pyutils import *
 from pdutils import *
 from pdpltutils import *
 
+from optparse import OptionParser
 import simlogging
 from simlogging import mconsole
 ''' 
@@ -21,6 +22,7 @@ from simlogging import mconsole
     aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
 '''
 LOGNAME=__name__
+LOGLEV = logging.DEBUG
 
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
@@ -40,8 +42,9 @@ legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
 def main():
     global logger
     LOGFILE="query_measurments.log"
-    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = logging.INFO,coloron=False)
-
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
+    (options,_) = cmdOptions()
+    kwargs = options.__dict__.copy()
     def noMeasurements(fdf):
         if len(fdf) == 0:
             mconsole("No measurements available for the segmentation database")
@@ -100,10 +103,11 @@ def main():
         ''' Propagate the start time to the downlink '''
         tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])        
         tdfx['start'] = tdfx.start.fillna(method='ffill')
+        tdfx['DTDATE'] = tdfx.start.map(lambda cell: datetime.datetime.fromtimestamp(cell,tz=pytz.timezone(TZ)))
         
         ''' Find the offset '''
-        # tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max())
-        tdfx['offset'] = getOffset()
+        tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max(),filteroffset=kwargs['filteroffset'])
+        # tdfx['offset'] = getOffset()
         ''' adjust the ue_xran latencies '''
         tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
                                             if row.direction == 'uplink' else row.ue_xran + row.offset, \
@@ -118,6 +122,16 @@ def main():
         mconsole("Writing {} measurements to the segmentation database".format(len(tdfx)))
 
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
+        
+def cmdOptions():
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-d", "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="Debugging mode")
+    parser.add_option("-f", "--filteroffset",
+                  action="store_true", dest="filteroffset", default=False,
+                  help="Filter out data without nearby offset values")
+    return  parser.parse_args()
     
 def checkAgainstCurrent(newdf):
     df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
@@ -171,7 +185,7 @@ def getLatencyData():
     
     return tdfy
 
-def getOffset(startts = None, endts = None, measure = 'winoffset'):
+def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset = True):
     TZ = 'America/New_York'
     df_offset_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=OFFSET_DB)
     offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
@@ -181,8 +195,9 @@ def getOffset(startts = None, endts = None, measure = 'winoffset'):
     startdt = datetime.datetime.fromtimestamp(startts,tz=pytz.timezone(TZ)) if startts is not None else None
     enddt = datetime.datetime.fromtimestamp(endts,tz=pytz.timezone(TZ)) if endts is not None else None
     ''' remove out of bounds '''
-    tdfx = tdfx[tdfx.TIMESTAMP >= startdt] if startts is not None else tdfx
-    tdfx = tdfx[tdfx.TIMESTAMP <= enddt] if endts is not None else tdfx
+    if filteroffset:
+        tdfx = tdfx[tdfx.TIMESTAMP >= startdt] if startts is not None else tdfx
+        tdfx = tdfx[tdfx.TIMESTAMP <= enddt] if endts is not None else tdfx
     if len(tdfx) < len(offset_df):
         mconsole("Filtered offset to boundaries: {} to {}".format(startdt,enddt))
     median_offset = tdfx.offset.median()
@@ -217,6 +232,7 @@ def lookupLeg(row):
 
 ''' Write into influxdb '''
 def writePkt(row, client):
+        mconsole("Writing measurement -- sequence={} direction={} start={}".format(row.sequence,row.direction,row.start),level="DEBUG")
     # try:
         pkt_entry = {"measurement":row['direction'], 
                      "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
