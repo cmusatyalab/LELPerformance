@@ -26,6 +26,7 @@ else:
     OSNAME='OTHER'
     
 LOGNAME=__name__
+LOGLEV = logging.INFO
 
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
@@ -49,7 +50,7 @@ dtre = re.compile(dtrerstr)
 def main():
     global logger
     LOGFILE="{}_offset.log".format(OSNAME)
-    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = logging.INFO,coloron=False)
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     offset_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DBNAME)
@@ -116,7 +117,8 @@ def parseBatch(btch,ntpserver = NTPSERVER):
     return retdf
     
 def writeInfluxDB(row,client = None):
-    
+    mconsole("Writing measurement -- offset={} TIMESTAMP={} ntpserver={} ostype={}" \
+             .format(row.OFFSET,row.TIMESTAMP,row.NTPSERVER,OSNAME), level="DEBUG") 
     pkt_entry = {"measurement":MEASURENAME,
                  "tags": {"ntpserver": row['NTPSERVER'],'TIMESTAMP':row.TIMESTAMP,'ostype':OSNAME}, 
                  "fields":{"offset": row['OFFSET']},"time":int(row.TIMESTAMP.timestamp())}
