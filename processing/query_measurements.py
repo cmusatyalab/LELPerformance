@@ -22,7 +22,7 @@ from simlogging import mconsole
     aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
 '''
 LOGNAME=__name__
-LOGLEV = logging.DEBUG
+LOGLEV = logging.INFO
 
 # Hardcode cloudlet IP and port for DB
 CLOUDLET_IP = '128.2.208.248'
@@ -42,9 +42,10 @@ legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
 def main():
     global logger
     LOGFILE="query_measurments.log"
-    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
+    loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = loglev,coloron=False)
     def noMeasurements(fdf):
         if len(fdf) == 0:
             mconsole("No measurements available for the segmentation database")
@@ -53,7 +54,7 @@ def main():
     seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     firsttime = True
     while True:
-        if not firsttime: time.sleep(5)
+        if not firsttime: time.sleep(int(kwargs['sleeptime']))
         firsttime = False
         try:
             latencydf = getLatencyData()
@@ -125,6 +126,8 @@ def main():
         
 def cmdOptions():
     parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-D", "--delay", dest="sleeptime",
+              help="Delay between queries", metavar="INT",default=5)
     parser.add_option("-d", "--debug",
                   action="store_true", dest="debug", default=False,
                   help="Debugging mode")
