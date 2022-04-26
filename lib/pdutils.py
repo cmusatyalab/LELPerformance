@@ -124,6 +124,11 @@ def time2month(srs):
     ''' srs is series with a string datetime'''
     return pd.to_datetime(srs).apply(lambda x: x.month).values
 
+def convTS(fdf):  # InfluxDB timestamps to a pandas timestamp
+    fdf = renamecol(fdf.reset_index(),col='index',newname='TIMESTAMP')
+    fdf['TIMESTAMP'] = fdf['TIMESTAMP'].map(lambda cell: cell.replace(microsecond=0))
+    return fdf
+
 def writejoin(df,dn,fn):
     df.to_csv(os.path.join(dn,fn))
 
