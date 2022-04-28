@@ -1,8 +1,10 @@
+#!/usr/bin/env python
 import pyshark
 import time
 import sys
 import os
 import datetime
+sys.path.append("../lib")
 
 from pyshark.capture.pipe_capture import PipeCapture
 
@@ -10,8 +12,16 @@ from pyshark.capture.pipe_capture import PipeCapture
 from influxdb import InfluxDBClient
 from optparse import OptionParser
 
-ECLIPSE_DEBUG = True
+# Logging
+import simlogging
+from simlogging import mconsole, logging
+LOGNAME=__name__
+LOGLEV = logging.INFO
+LOGFILE="cloudlet_measure.log"
+logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
 
+
+ECLIPSE_DEBUG = True
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 
@@ -99,8 +109,8 @@ def log_packet(pkt):
         
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
-            print("Has data_time: {} frame_info.time: {} {} {}" \
-                  .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst))
+            mconsole("Has data_time: {} frame_info.time: {} {} {}" \
+                  .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst), level="DEBUG")
         except:
             icmp_timestamp = "0"
 
@@ -119,7 +129,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        print("2: CMP SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
+        mconsole("Writing ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                                "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
