@@ -129,7 +129,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        mconsole("Writing ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
+        mconsole("Writing cloudlet ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                                "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
