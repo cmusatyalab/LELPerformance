@@ -24,64 +24,95 @@ from simlogging import mconsole
 LOGNAME=__name__
 LOGLEV = logging.INFO
 
-# Hardcode cloudlet IP and port for DB
+''' Hardcode cloudlet IP and port for DB '''
 CLOUDLET_IP = '128.2.208.248'
 EPC_IP = '192.168.25.4'
 CLOUDLET_PORT = 8086
 TZ = 'America/New_York'
-''' Obtain clients for ICMP databases ''' 
+
+''' Influxdb databases ''' 
 CLOUDLET_ICMP_DB = 'cloudleticmp'
 WATERSPOUT_ICMP_DB = 'waterspouticmp'
 UE_ICMP_DB = 'ueicmp'
 SEG_DB = 'segmentation'
 OFFSET_DB = 'winoffset'
 
+''' For labeling segments '''
 legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
            7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
 
+''' For bad sequences '''
+blacklist = []
+
 def main():
     global logger
+    global blacklist
+    
+    ''' Logging '''
     LOGFILE="query_measurments.log"
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = loglev,coloron=False)
-    def noMeasurements(fdf):
+    
+    def noMeasurements(fdf,tag='no info'):
         if len(fdf) == 0:
-            mconsole("No measurements available for the segmentation database")
+            mconsole("No measurements available for the segmentation database: {}".format(tag))
             return True
         else: return False
+        
+    ''' Get the database client '''
     seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     firsttime = True
+    
+    ''' Now keep looping '''
     while True:
         if not firsttime: time.sleep(int(kwargs['sleeptime']))
         firsttime = False
+        
+        ''' Pull the data from the cloudlet, waterspout and ue databases '''
         try:
             latencydf = getLatencyData()
         except:
             mconsole("Did not get any latency data",level = "ERROR")
             continue
+        
+        ''' Is it already in the segmentation database? '''
         latencydf = checkAgainstCurrent(latencydf)
-        if noMeasurements(latencydf): continue
-        else: mconsole("Retrieved {} possible new measurements".format(len(list(set(latencydf.sequence)))),level="DEBUG")
+        if noMeasurements(latencydf,tag="no new"): continue
+        else: mconsole("Retrieved {} possible sequences (Sequence Nos: {})" \
+                       .format(len(list(set(latencydf.sequence))),list(set(latencydf.sequence))),level="DEBUG")
         
         ''' Group the sequences and clean up '''
         tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
-        # Make a small df that has just the number of times a sequence appears in the df
+        
+        ''' Make a small df that has just the number of times a sequence appears in the df '''
         tdfz = renamecol(tdfz.groupby(by='sequence') \
                 .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
-        # Join the small df with bigger
+        
+        ''' Join the small df with bigger '''
         tdfz = tdfz.set_index('sequence').join(latencydf.set_index('sequence')) \
                 .reset_index().sort_values(['sequence','STEP'])
         tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
         
-        tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
-        if noMeasurements(tdfz): continue
-        else: mconsole("Retrieved {} complete measurements".format(len(list(set(tdfz.sequence)))*2),level="DEBUG") # 2 for uplink and downlink
+        ''' Check for complete sequence data from all probes '''
+        preseq = list(set(tdfz.sequence))
+        ''' Remove partial sequences '''
+        tdfz = tdfz[tdfz.COUNT >= 8] 
         
-        ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
+        ''' Add partial sequences to the blacklist '''
+        if noMeasurements(tdfz,tag="partial data"): 
+            mconsole("Sequence(s) {} added to blacklist".format(preseq),level = "DEBUG")
+            blacklist += preseq
+            continue
+        else: mconsole("Retrieved {} complete sequences (Sequence Nos: {})" \
+                       .format(len(list(set(tdfz.sequence))),list(set(tdfz.sequence))),level="DEBUG") # 2 for uplink and downlink
+        
+        ''' Calculate difference between each step ; save the epoch from the UE uplink as the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
         tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
+        
+        ''' Calculate the round trip time (RTT) two different ways '''
         '''RTT and STEPSUM should be the same; RTT is the (end - start) at the UE; STEPSUM is the sum of the DELTAS '''
         tdfz['RTT'] =  tdfz.epoch - tdfz.epoch.shift(7)
         tdfz['RTT'] = tdfz.apply(lambda row: row['RTT'] \
@@ -90,9 +121,8 @@ def main():
         tdfz['STEPSUM'] = tdfz.apply(lambda row: row['STEPSUM'] \
                         if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
 
-        ''' Convert for storage in the segmentation database '''
+        ''' Convert the DF for storage in the segmentation database '''
         indlst = ['sequence','direction','RTT','STEPSUM']
-        
         keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
         tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
                         .reset_index(drop=True).drop_duplicates()
@@ -103,7 +133,7 @@ def main():
 
         ''' Get rid of multilevel index '''
         tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
-        if noMeasurements(tdfx): continue
+        if noMeasurements(tdfx,tag="nothing after pivot"): continue
         ''' Propagate the start time to the downlink '''
         tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])        
         tdfx['start'] = tdfx.start.fillna(method='ffill')
@@ -111,8 +141,8 @@ def main():
         
         ''' Find the offset '''
         tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max(),filteroffset=kwargs['filteroffset'])
-        # tdfx['offset'] = getOffset()
-        ''' adjust the ue_xran latencies '''
+
+        ''' adjust the ue_xran latencies to correct for offset'''
         tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
                                             if row.direction == 'uplink' else row.ue_xran + row.offset, \
                                             axis=1)
@@ -121,10 +151,9 @@ def main():
         tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
         
         ''' Write to the segmentation database '''
-
         tdfx = tdfx.dropna()
-        mconsole("Writing {} measurements to the segmentation database".format(len(tdfx)))
-
+        mconsole("Writing {} measurements to the segmentation database  (Sequence Nos: {})" \
+                 .format(len(tdfx),list(set(tdfx.sequence))))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
         
 def cmdOptions():
@@ -140,6 +169,7 @@ def cmdOptions():
     return  parser.parse_args()
     
 def checkAgainstCurrent(newdf):
+    ''' Is the sequence already in the database '''
     df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
     measure = 'uplink'
     try:
@@ -148,7 +178,10 @@ def checkAgainstCurrent(newdf):
         return newdf
     seqlst = list(set(seg_ul_df.sequence))
     return newdf[~newdf.sequence.isin(seqlst)]
-    
+
+def checkAgainstBlacklist(indf):
+    retdf = indf[~indf.sequence.isin(blacklist)]
+    return retdf
 
 def getLatencyData():
     ''' Get all the clients '''
@@ -181,6 +214,9 @@ def getLatencyData():
     
     ''' Only keep sequences that are in all three dataframes '''
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+    
+    ''' Only keep sequences that are not on blacklist '''
+    tdfy = checkAgainstBlacklist(tdfy)
     
     ''' Label the segments in what remains '''
     
