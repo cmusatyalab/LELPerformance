@@ -63,6 +63,8 @@ def main():
             continue
         latencydf = checkAgainstCurrent(latencydf)
         if noMeasurements(latencydf): continue
+        else: mconsole("Retrieved {} possible new measurements".format(len(list(set(latencydf.sequence)))),level="DEBUG")
+        
         ''' Group the sequences and clean up '''
         tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
         # Make a small df that has just the number of times a sequence appears in the df
@@ -75,6 +77,7 @@ def main():
         
         tdfz = tdfz[tdfz.COUNT >= 8] # remove partial data
         if noMeasurements(tdfz): continue
+        else: mconsole("Retrieved {} complete measurements".format(len(list(set(tdfz.sequence)))*2),level="DEBUG") # 2 for uplink and downlink
         
         ''' Calculate difference between each step ; save the epoch for the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
