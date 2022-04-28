@@ -2,14 +2,20 @@
 import time
 import sys
 import os
-
-# devnull = [print(pth) for pth in sys.path]
 import pyshark
 from pyshark.capture.pipe_capture import PipeCapture
-
+sys.path.append("../lib")
 
 from influxdb import InfluxDBClient
 from optparse import OptionParser
+
+# Logging
+import simlogging
+from simlogging import mconsole, logging
+LOGNAME=__name__
+LOGLEV = logging.INFO
+LOGFILE="laptop_measure.log"
+logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
 
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
@@ -110,7 +116,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        print("2: ICMP SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
+        mconsole("Writing UE ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                     "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
