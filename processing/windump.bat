@@ -1,1 +1,1 @@
- WinDump -i \Device\NPF_{8C286288-53B6-4FEB-883C-A12CE439F5DA} -w - -U -s 0 icmp |python laptop_measure.py
+WinDump -i \Device\NPF_{8C286288-53B6-4FEB-883C-A12CE439F5DA} -w - -U -s 0 icmp |python laptop_measure.py
