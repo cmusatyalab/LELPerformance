@@ -82,7 +82,7 @@ def main():
         if noMeasurements(latencydf,tag="no new"): continue
         else: mconsole("Retrieved {} possible sequences (Sequence Nos: {})" \
                        .format(len(list(set(latencydf.sequence))),list(set(latencydf.sequence))),level="DEBUG")
-        
+        fullseqlst = list(set(latencydf.sequence))
         ''' Group the sequences and clean up '''
         tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
         
@@ -105,7 +105,7 @@ def main():
             mconsole("Sequence(s) {} added to blacklist".format(preseq),level = "DEBUG")
             blacklist += preseq
             continue
-        else: mconsole("Retrieved {} complete sequences (Sequence Nos: {})" \
+        else: mconsole("Retrieved {} possibly complete sequences (Sequence Nos: {})" \
                        .format(len(list(set(tdfz.sequence))),list(set(tdfz.sequence))),level="DEBUG") # 2 for uplink and downlink
         
         ''' Calculate difference between each step ; save the epoch from the UE uplink as the start of the sequence '''
@@ -129,14 +129,19 @@ def main():
 
         ''' Pivot the data '''
         tdfx = tdfx.drop_duplicates(subset = indlst + ['LEGNAME'])
+        debugdf = tdfx.copy()
         tdfx = tdfx.pivot(index=indlst, columns=['LEGNAME'], values=['DELTA']).reset_index()
-
         ''' Get rid of multilevel index '''
         tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
-        if noMeasurements(tdfx,tag="nothing after pivot"): continue
+        if noMeasurements(tdfx,tag="nothing after pivot") or "start" not in tdfx.columns: continue
         ''' Propagate the start time to the downlink '''
-        tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])        
-        tdfx['start'] = tdfx.start.fillna(method='ffill')
+        tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])
+        try: 
+            tdfx['start'] = tdfx.start.fillna(method='ffill').dropna()
+        except:
+            mconsole("No start field in data frame",level="ERROR")
+            continue
+        tdfx = tdfx.dropna(subset=['start'])
         tdfx['DTDATE'] = tdfx.start.map(lambda cell: datetime.datetime.fromtimestamp(cell,tz=pytz.timezone(TZ)))
         
         ''' Find the offset '''
@@ -152,6 +157,7 @@ def main():
         
         ''' Write to the segmentation database '''
         tdfx = tdfx.dropna()
+        blacklist += list(set(fullseqlst) - set(tdfx.sequence) - set(blacklist))
         mconsole("Writing {} measurements to the segmentation database  (Sequence Nos: {})" \
                  .format(len(tdfx),list(set(tdfx.sequence))))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
