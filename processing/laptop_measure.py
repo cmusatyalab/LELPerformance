@@ -97,7 +97,7 @@ def log_packet(pkt):
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
-            icmp_timestamp = 0
+            icmp_timestamp = "NA"
             # print("No Timestamp")
             # return
 
