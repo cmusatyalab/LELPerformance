@@ -2,6 +2,7 @@ import time
 import sys
 import os
 import re
+import time
 # from datetime import datetime
 
 sys.path.append("../lib")
@@ -35,6 +36,7 @@ NTPSERVER = "0.north-america.pool.ntp.org"
 NTPSERVER = "north-america.pool.ntp.org"
 NTPSERVER = "labgw.elijah.cs.cmu.edu"
 BATCHSIZE = 20
+SLEEPTIME = 3
 DBNAME = 'winoffset'
 MEASURENAME = 'winoffset'
 
@@ -54,13 +56,15 @@ def main():
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     offset_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DBNAME)
-    mconsole("Starting offset measurements against {} with batchsize={}".format(NTPSERVER,kwargs['batchsize']))
+    mconsole("Starting offset measurements against {} with batchsize={} and {} seconds between batches" \
+             .format(NTPSERVER,kwargs['batchsize'],kwargs['querytime']))
     while True:
         ''' This command must be run as administrator '''
         batch = getBatch(batchsize = kwargs['batchsize'])
         batch = parseBatch(batch)
         mconsole("Writing {} offset measurements".format(len(batch)))
         batch.reset_index().apply(writeInfluxDB,client=offset_client, axis=1)
+        time.sleep(int(kwargs['querytime']))
     pass
 
 def cmdOptions():
@@ -70,6 +74,8 @@ def cmdOptions():
                   help="Debugging mode")
     parser.add_option("-B", "--batchsize", dest="batchsize", type = 'int',
                   help="How many measurements per query", metavar="INT",default=BATCHSIZE)
+    parser.add_option("-T", "--querytime", dest="querytime", type = 'int',
+                  help="How long to wait between batches (s)", metavar="INT",default=SLEEPTIME)
     return  parser.parse_args()
 
 def getBatch(ntpserver = NTPSERVER, batchsize = BATCHSIZE,output = False):
