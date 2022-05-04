@@ -1,265 +1,296 @@
-"""
-Contains routine to compute each segment latency using stored fields for each probe. 
-Correlates the packets at each probe in real time, computes latency and uploads results
-into uplink and downlink databases. 
+#!/usr/bin/env python
 
-This file only contains the correlation script for ICMP data. The corresponding TCP 
-file should be located in Google Drive on Google CoLab.
-"""
+import sys
 
-from influxdb import InfluxDBClient
+sys.path.append("../lib")
+import os
+from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import time
+from pyutils import *
+from pdutils import *
+from pdpltutils import *
 
-# Hardcode cloudlet IP and port for DB
+from optparse import OptionParser
+import simlogging
+from simlogging import mconsole
+''' 
+    This program collects latency measurements from the UE, waterspout and cloudlet influxdb databases,
+    aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
+'''
+LOGNAME=__name__
+LOGLEV = logging.INFO
+
+''' Hardcode cloudlet IP and port for DB '''
 CLOUDLET_IP = '128.2.208.248'
+EPC_IP = '192.168.25.4'
 CLOUDLET_PORT = 8086
+TZ = 'America/New_York'
 
-# Obtain clients for ICMP databases
+''' Influxdb databases ''' 
 CLOUDLET_ICMP_DB = 'cloudleticmp'
 WATERSPOUT_ICMP_DB = 'waterspouticmp'
 UE_ICMP_DB = 'ueicmp'
+SEG_DB = 'segmentation'
+OFFSET_DB = 'winoffset'
 
-cloudlet_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
-waterspout_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
-ue_icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+''' For labeling segments '''
+legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
+           7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
 
-def retrieve_timestamp(client, src, dst, limit, is_ue, timestamp=None):
-    """
-    Routine to obtain database entries that occurred after last retrieved timestamp (ensures we
-    only obtain the most recent packets and not packets that have already been correlated and 
-    inserted into the DB)
+''' For bad sequences '''
+blacklist = []
 
-    Inputs
-
-      client: InfluxDB client corresponding to ICMP database to retrieve stored packets from
-
-      src: the source IP address to filter for in packets
-
-      dst: the destination IP address to filter for in packets
-
-      limit: number of packets to retrieve from function call
-
-      is_ue: if retrieval corresponds to UE packets received. Necessary since src IP address varies
-        depending on call, so we cannot use the source to identify whether packet comes from UE
-
-      timestamp: timestamp to ensure we retrieve only packets more recent than this provided value
-
-    Return
-
-      Tuple of uplink and downlink packets received (each packet is stored in list format of relevant fields)
-
-    """
-
-    # Filter based on timestamp if first iteration (else field will be None)
-    if timestamp is not None:
-      query = "SELECT src, dst, data_time, identifier, epoch FROM latency WHERE time > '%s' ORDER BY time DESC LIMIT %s" % (timestamp, limit)
-    else: 
-      query = "SELECT src, dst, data_time, identifier, epoch FROM latency ORDER BY time DESC LIMIT %s" % (limit)
-
-    entries = client.query(query).get_points()
-
-    uplink_values = []
-    downlink_values = []
-
-    # For each retrieved field, extract the fields necessary to correlate packets and convert epoch time to milliseconds
-    for entry in entries:
-
-      if (is_ue):
-        # Changing UE src destination so disregard that value if for UE, cannot use to identify
-        if (entry['dst'] == dst):
-          uplink_values.append([entry['data_time'], entry['identifier'], (entry['epoch'] * 1000), entry['time']])
-
-        if (entry['src'] == dst):
-          downlink_values.append([entry['data_time'], entry['identifier'], (entry['epoch'] * 1000), entry['time']])
-      
-      else:
-        if (entry['src'] == src) and (entry['dst'] == dst):
-          uplink_values.append([entry['data_time'], entry['identifier'], (entry['epoch'] * 1000), entry['time']])
-
-        if (entry['src'] == dst) and (entry['dst'] == src):
-          downlink_values.append([entry['data_time'], entry['identifier'], (entry['epoch'] * 1000), entry['time']])
-      
-    return (uplink_values, downlink_values)
-
-
-def join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, ue_measurements):
-    """
-    Routine to correlate packets from the UE, XRAN, EPC and Cloudlet probes by using JOIN on identical fields
-
-    Inputs
-
-      cloudlet_measurements: list of packets retrieved from cloudlet probe to correlate
-
-      xran_measurements: list of packets retrieved from xran probe (waterspout) to correlate
-
-      epc_measurements: list of packets retrieved from epc probe (waterspout) to correlate
-
-      ue_measurements: list of packets retrieved from UE to correlate
-
-    Return
-
-      Uplink and downlink segment latency values, as well as timestamp of most recent packet retrieved 
-      from each probe
-
-    """
-
-    # Convert uplink and downlink packets into dataframes
-    cloudlet_uplink_df = pd.DataFrame(cloudlet_measurements[0], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    cloudlet_uplink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
-    cloudlet_downlink_df = pd.DataFrame(cloudlet_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    cloudlet_downlink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time','Identifier'])
-
-    xran_uplink_df = pd.DataFrame(xran_measurements[0], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    xran_uplink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
-    xran_downlink_df = pd.DataFrame(xran_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    xran_downlink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time','Identifier'])
-
-    epc_uplink_df = pd.DataFrame(epc_measurements[0], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    epc_uplink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time','Identifier'])
-    epc_downlink_df = pd.DataFrame(epc_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    epc_downlink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
-
-    ue_uplink_df = pd.DataFrame(ue_measurements[0], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    ue_uplink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time','Identifier'])
-    ue_downlink_df = pd.DataFrame(ue_measurements[1], columns=['Data Time', 'Identifier', 'Epoch', 'Time'])
-    ue_downlink_df.drop_duplicates(inplace=True, keep='first', subset=['Data Time', 'Identifier'])
-
-
-    # Correlate packets by joining on ICMP timestamp and ICMP identifier
-    xran_epc_uplink_df = pd.merge(
-        left=xran_uplink_df, right=epc_uplink_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    xran_epc_cloudlet_df = pd.merge(
-        left=xran_epc_uplink_df, right=cloudlet_uplink_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    xran_epc_cloudlet_df.rename(
-        columns={"Epoch_x":"xran_time", "Epoch_y":"epc_time", "Epoch":"cloudlet_time", "Time_x":"xran_timestamp", "Time_y":"epc_timestamp", "Time":"cloudlet_timestamp"}, 
-        inplace=True
-    )
-
-    # Join with the UE DB
-    uplink_df = pd.merge(
-        left=ue_uplink_df, right=xran_epc_cloudlet_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    uplink_df.rename(columns={"Epoch":"ue_time"}, inplace=True)
-    uplink_segments = pd.concat([(uplink_df['xran_time'] - uplink_df['ue_time']), (uplink_df['epc_time'] - uplink_df['xran_time']), (uplink_df['cloudlet_time'] - uplink_df['epc_time'])], axis=1, keys=['ue_xran', 'xran_epc', 'epc_cloudlet'])
-
-
-    # Repeat steps for downlink
-    xran_epc_downlink_df = pd.merge(
-        left=xran_downlink_df, right=epc_downlink_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    xran_epc_cloudlet_downlink_df = pd.merge(
-        left=xran_epc_downlink_df, right=cloudlet_downlink_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    xran_epc_cloudlet_downlink_df.rename(
-        columns={"Epoch_x":"xran_time", "Epoch_y":"epc_time", "Epoch":"cloudlet_time", "Time_x":"xran_timestamp", "Time_y":"epc_timestamp", "Time":"cloudlet_timestamp"}, 
-        inplace=True
-    )
-
-    # Join with the UE DB
-    downlink_df = pd.merge(
-        left=ue_downlink_df, right=xran_epc_cloudlet_downlink_df, how='inner', on=['Data Time', 'Identifier']
-    )
-
-    downlink_df.rename(
-        columns={"Epoch":"ue_time"}, inplace=True
-    )
-
-    downlink_segments = pd.concat([(downlink_df['ue_time'] - downlink_df['xran_time']), (downlink_df['xran_time'] - downlink_df['epc_time']), (downlink_df['epc_time'] - downlink_df['cloudlet_time'])], axis=1, keys=['ue_xran', 'xran_epc', 'epc_cloudlet'])
-
-    # Update the timestamps to query next iteration based on latest downlink timestamps correlated
-    cloudlet_timestamp_retrieved = downlink_df['cloudlet_timestamp'].max()
-    xran_timestamp_retrieved = downlink_df['xran_timestamp'].max()
-    epc_timestamp_retrieved = downlink_df['epc_timestamp'].max()
-    ue_timestamp_retrieved = downlink_df['Time'].max()
-
-    return uplink_segments, downlink_segments, (cloudlet_timestamp_retrieved, xran_timestamp_retrieved, epc_timestamp_retrieved, ue_timestamp_retrieved)
-
-# Create client to be used for writing to segmentation DB (DB where we store the computed segment latencies)
-SEGMENTATION_DB = 'segmentation'
-segmentation_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEGMENTATION_DB)
-segmentation_client.alter_retention_policy("autogen", database=SEGMENTATION_DB, duration="30d", default=True)
-
-def upload_measurements(df, is_uplink):
-  """ 
-  Routine to store computed segment latency values to 'segmentation' database. Maintains
-  separate measurements for uplink and downlink
-
-  Inputs
-    df: dataframe containing the segment latencies in each row
-
-    is_uplink: true if corresponds to uplink dataframe, else false
-
-  Return
-
-    None
-
-  """
-  packets = []
-  count = 0
-  for _, row in df.iterrows():
-  
-    # Create new entry to write to segmentation database
-    if (is_uplink):
-      pkt_entry = {"measurement":"uplink", "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], "epc_cloudlet": row['epc_cloudlet']}}
-    else:
-      pkt_entry = {"measurement":"downlink", "fields":{"ue_xran": row['ue_xran'], "xran_epc": row['xran_epc'], "epc_cloudlet": row['epc_cloudlet']}}
-
-
-    # Handle potential synchronization error 
-    if (row['ue_xran'] < 0) or (row['xran_epc'] < 0) or (row['epc_cloudlet'] < 0):
-        print("Potential synchronization error. Segment has latencies: %f %f %f" % (row['ue_xran'], row['xran_epc'], row['epc_cloudlet']))
-        continue
-
-
-    # Input uplink or downlink latencies into database
-    packets.append(pkt_entry)
-    print(count)
-    segmentation_client.write_points(packets)
-    packets.clear()
-
-    count += 1
-
-cloudlet_timestamp = None
-xran_timestamp = None
-epc_timestamp = None
-ue_timestamp = None
-
-# Iterates to continually retrieve most recent packets, correlate packets and 
-# upload resulting segment latencies to segmentation database
-while (True):
-    cloudlet_measurements = retrieve_timestamp(cloudlet_icmp_client, '128.2.212.53', '128.2.208.248', 2000, False, cloudlet_timestamp)
-    xran_measurements = retrieve_timestamp(waterspout_icmp_client, '192.168.25.2', '192.168.25.4', 2000, False, xran_timestamp)
-    epc_measurements = retrieve_timestamp(waterspout_icmp_client, '192.168.25.4', '128.2.208.248', 2000, False, epc_timestamp)
+def main():
+    global logger
+    global blacklist
     
-    # Irrelevant what we specify for UE src address (filtered out since changes each session)
-    ue_measurements = retrieve_timestamp(ue_icmp_client, '192.168.25.57', '128.2.208.248', 2000, True, ue_timestamp)
+    ''' Logging '''
+    LOGFILE="query_measurments.log"
+    (options,_) = cmdOptions()
+    kwargs = options.__dict__.copy()
+    loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = loglev,coloron=False)
+    
+    def noMeasurements(fdf,tag='no info'):
+        if len(fdf) == 0:
+            mconsole("No measurements available for the segmentation database: {}".format(tag))
+            return True
+        else: return False
+        
+    ''' Get the database client '''
+    seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+    firsttime = True
+    
+    ''' Now keep looping '''
+    while True:
+        if not firsttime: time.sleep(int(kwargs['sleeptime']))
+        firsttime = False
+        
+        ''' Pull the data from the cloudlet, waterspout and ue databases '''
+        try:
+            latencydf = getLatencyData()
+        except:
+            mconsole("Did not get any latency data",level = "ERROR")
+            continue
+        
+        ''' Is it already in the segmentation database? '''
+        latencydf = checkAgainstCurrent(latencydf)
+        if noMeasurements(latencydf,tag="no new"): continue
+        else: mconsole("Retrieved {} possible sequences (Sequence Nos: {})" \
+                       .format(len(list(set(latencydf.sequence))),list(set(latencydf.sequence))),level="DEBUG")
+        fullseqlst = list(set(latencydf.sequence))
+        ''' Group the sequences and clean up '''
+        tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
+        
+        ''' Make a small df that has just the number of times a sequence appears in the df '''
+        tdfz = renamecol(tdfz.groupby(by='sequence') \
+                .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
+        
+        ''' Join the small df with bigger '''
+        tdfz = tdfz.set_index('sequence').join(latencydf.set_index('sequence')) \
+                .reset_index().sort_values(['sequence','STEP'])
+        tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
+        
+        ''' Check for complete sequence data from all probes '''
+        preseq = list(set(tdfz.sequence))
+        ''' Remove partial sequences '''
+        tdfz = tdfz[tdfz.COUNT >= 8] 
+        
+        ''' Add partial sequences to the blacklist '''
+        if noMeasurements(tdfz,tag="partial data"): 
+            mconsole("Sequence(s) {} added to blacklist".format(preseq),level = "DEBUG")
+            blacklist += preseq
+            continue
+        else: mconsole("Retrieved {} possibly complete sequences (Sequence Nos: {})" \
+                       .format(len(list(set(tdfz.sequence))),list(set(tdfz.sequence))),level="DEBUG") # 2 for uplink and downlink
+        
+        ''' Calculate difference between each step ; save the epoch from the UE uplink as the start of the sequence '''
+        tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
+        tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
+        
+        ''' Calculate the round trip time (RTT) two different ways '''
+        '''RTT and STEPSUM should be the same; RTT is the (end - start) at the UE; STEPSUM is the sum of the DELTAS '''
+        tdfz['RTT'] =  tdfz.epoch - tdfz.epoch.shift(7)
+        tdfz['RTT'] = tdfz.apply(lambda row: row['RTT'] \
+                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
+        tdfz['STEPSUM'] = tdfz.DELTA.rolling(min_periods=1, window=7).sum()
+        tdfz['STEPSUM'] = tdfz.apply(lambda row: row['STEPSUM'] \
+                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
 
-    uplink_segments, downlink_segments, timestamps = join_timestamps(cloudlet_measurements, xran_measurements, epc_measurements, ue_measurements)
+        ''' Convert the DF for storage in the segmentation database '''
+        indlst = ['sequence','direction','RTT','STEPSUM']
+        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
+        tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
+                        .reset_index(drop=True).drop_duplicates()
 
-    # Set the timestamps to updated values (if join was successful)
-    if (len(downlink_segments) > 0):
-      cloudlet_timestamp = timestamps[0]
-      xran_timestamp = timestamps[1]
-      epc_timestamp = timestamps[2]
-      ue_timestamp = timestamps[3]
+        ''' Pivot the data '''
+        tdfx = tdfx.drop_duplicates(subset = indlst + ['LEGNAME'])
+        debugdf = tdfx.copy()
+        tdfx = tdfx.pivot(index=indlst, columns=['LEGNAME'], values=['DELTA']).reset_index()
+        ''' Get rid of multilevel index '''
+        tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
+        if noMeasurements(tdfx,tag="nothing after pivot") or "start" not in tdfx.columns: continue
+        ''' Propagate the start time to the downlink '''
+        tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])
+        try: 
+            tdfx['start'] = tdfx.start.fillna(method='ffill').dropna()
+        except:
+            mconsole("No start field in data frame",level="ERROR")
+            continue
+        tdfx = tdfx.dropna(subset=['start'])
+        tdfx['DTDATE'] = tdfx.start.map(lambda cell: datetime.datetime.fromtimestamp(cell,tz=pytz.timezone(TZ)))
+        
+        ''' Find the offset '''
+        tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max(),filteroffset=kwargs['filteroffset'])
 
-    print(len(uplink_segments))
-    print(len(downlink_segments))
+        ''' adjust the ue_xran latencies to correct for offset'''
+        tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
+                                            if row.direction == 'uplink' else row.ue_xran + row.offset, \
+                                            axis=1)
+        
+        ''' Cleanup the cloudlet processing time '''
+        tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
+        
+        ''' Write to the segmentation database '''
+        tdfx = tdfx.dropna()
+        blacklist += list(set(fullseqlst) - set(tdfx.sequence) - set(blacklist))
+        mconsole("Writing {} measurements to the segmentation database  (Sequence Nos: {})" \
+                 .format(len(tdfx),list(set(tdfx.sequence))))
+        tdfx[:].apply(writePkt,client = seg_client, axis=1)
+        
+def cmdOptions():
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-D", "--delay", dest="sleeptime",
+              help="Delay between queries", metavar="INT",default=5)
+    parser.add_option("-d", "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="Debugging mode")
+    parser.add_option("-f", "--filteroffset",
+                  action="store_true", dest="filteroffset", default=False,
+                  help="Filter out data without nearby offset values")
+    return  parser.parse_args()
+    
+def checkAgainstCurrent(newdf):
+    ''' Is the sequence already in the database '''
+    df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+    measure = 'uplink'
+    try:
+        seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
+    except:
+        return newdf
+    seqlst = list(set(seg_ul_df.sequence))
+    return newdf[~newdf.sequence.isin(seqlst)]
 
-    # Upload results to segmentation database
-    upload_measurements(uplink_segments, True)
-    upload_measurements(downlink_segments, False)
+def checkAgainstBlacklist(indf):
+    retdf = indf[~indf.sequence.isin(blacklist)]
+    return retdf
 
-    # Allow time to populate the probe databases
-    time.sleep(5)
+def getLatencyData():
+    ''' Get all the clients '''
+    df_cloudlet_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
+    df_waterspout_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
+    df_ue_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+                                        
+    ''' Query the different network nodes' data '''
+    measure = 'latency'
+    cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))[measure]
+    waterspout_icmp_df = df_waterspout_icmp_client.query("select * from {}".format(measure))[measure]
+    ''' Eliminate duplicate waterspout packets -- fix for XRAN double reporting with different epochs '''
+    waterspout_icmp_df = waterspout_icmp_df.groupby(by=['sequence','src','dst']).agg({'epoch':'min'}) \
+                .sort_values('epoch').reset_index()
+    
+    ue_icmp_df = df_ue_icmp_client.query("select * from {}".format(measure))[measure]
+    
+    ''' Get list of sequences in all three dataframes '''
+    seqminset = list(set(ue_icmp_df.sequence) \
+        .intersection((set(cloudlet_icmp_df.sequence) \
+        .intersection(set(waterspout_icmp_df.sequence)))))
+    
+    ''' Combine the nodes '''
+    dflst = [(cloudlet_icmp_df,'cloudlet'),(waterspout_icmp_df,'waterspout'),(ue_icmp_df,'ue')]
+    tdfy = pd.DataFrame()
+    for tup in dflst:
+        tdfx = tup[0]
+        tdfx['NAME'] = tup[1]
+        tdfy = tdfy.append(tdfx)
+    
+    ''' Only keep sequences that are in all three dataframes '''
+    tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+    
+    ''' Only keep sequences that are not on blacklist '''
+    tdfy = checkAgainstBlacklist(tdfy)
+    
+    ''' Label the segments in what remains '''
+    
+    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
+    tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
+    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
+    
+    return tdfy
+
+def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset = True):
+    TZ = 'America/New_York'
+    df_offset_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=OFFSET_DB)
+    offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
+    ''' Filter by ts boundaries '''
+    tdfx = offset_df.copy()
+    ''' convert from epoch to datetime '''
+    startdt = datetime.datetime.fromtimestamp(startts,tz=pytz.timezone(TZ)) if startts is not None else None
+    enddt = datetime.datetime.fromtimestamp(endts,tz=pytz.timezone(TZ)) if endts is not None else None
+    ''' remove out of bounds '''
+    if filteroffset:
+        tdfx = tdfx[tdfx.TIMESTAMP >= startdt] if startts is not None else tdfx
+        tdfx = tdfx[tdfx.TIMESTAMP <= enddt] if endts is not None else tdfx
+    if len(tdfx) < len(offset_df):
+        mconsole("Filtered offset to boundaries: {} to {}".format(startdt,enddt))
+    median_offset = tdfx.offset.median()
+    return median_offset
+
+
+''' Label the legs '''
+def lookupLeg(row):
+    src = row.src
+    dst = row.dst
+    name = row.NAME
+    ddir = np.nan
+    step = np.nan
+    if dst == CLOUDLET_IP:
+        ddir = "uplink"        
+    elif src == CLOUDLET_IP:
+        ddir = "downlink"
+    elif dst == EPC_IP:
+        ddir = "uplink"
+    elif src == EPC_IP:
+        ddir = "downlink"
+    if ddir == 'uplink':
+        if name == 'ue': step = 0
+        elif name == 'cloudlet': step = 3
+        elif name == 'waterspout': step = 1 if dst == EPC_IP else 2                
+    elif ddir == 'downlink':
+        if name == 'ue': step = 7
+        elif name == 'cloudlet': step = 4
+        elif name == 'waterspout': step = 5 if dst == EPC_IP else 6
+    legname = legdict[step]
+    return (ddir,step,legname)
+
+''' Write into influxdb '''
+def writePkt(row, client):
+        mconsole("Writing measurement -- sequence={} direction={} start={}".format(row.sequence,row.direction,row.start),level="DEBUG")
+    # try:
+        pkt_entry = {"measurement":row['direction'], 
+                     "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
+                     "fields":{"ue_xran": row['ue_xran'], 'ue_xran_adjust':row['ue_xran_adjust'],
+                               'offset':row['offset'],"xran_epc": row['xran_epc'], 
+                                "epc_cloudlet": row['epc_cloudlet'], "start": row['start'],
+                                "cloudlet_proc": row['cloudlet_proc'],
+                                'rtt':row.RTT,'stepsum':row.STEPSUM},"time":int(row['start']*1e6)}
+        client.write_points([pkt_entry], time_precision = 'u')
+    # except:
+    #     mconsole("Bad measurement: {}".format(row),level="ERROR")
+
+if __name__ == '__main__': main()

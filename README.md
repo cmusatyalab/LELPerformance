@@ -21,6 +21,18 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 ```
+If using a Windows UE, you will need to install WinDump and run:
+```
+WinDump -i 4 -w - -U -s 0 icmp |python laptop_measure.py
+```
+Use *WinDump -D* to identify which interface number to use.
+
+
+Note that the following command helps to filter out the overwhelming amount of waterspout TCP and SCTP traffic on that are spurious if you're only interested in ICMP ping data:
+
+```
+ sudo tcpdump -s 0 -U -w - -i eno1 not tcp and not sctp | python3 waterspout_measure.py
+ ```
 
 ## Latency Segmentation Calculations
 We use the 'query_measurements.py' script to calculate segment latency from extracted fields for each probe and upload them to a separate database. The commands to run this script are: 
@@ -35,6 +47,14 @@ To store all values above, InfluxDB must be running on the Cloudlet. The Cloudle
 ```
 docker run -it -p 8086:8086 -v influxdb:/var/lib/influxdb influxdb:1.8
 ```
+
+## Grafana Dashboard
+To enable the grafana dashboard, grafana must be running on the Cloudlet. To run Grafana, run the following command on the Cloudlet:
+
+```
+docker run -d -p 3000:3000 grafana/grafana-enterprise
+```
+Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and import processing/dashboard.json. Within grafana, add a datasource for InfluxDB. In the datasource, use the IP or domain name of the Cloudlet, not *localhost*. Now, edit each of the panels in the dashboard to use that datasource. Even though the InfluxDB datasource is the default in the imported json, you need to reconnect the datasource to the dashboard for it to access the data.
 
 # OpenRTiST
 To run experiments with OpenRTiST (https://github.com/cmusatyalab/openrtist), for TCP measurements, run the following command on the cloudlet:

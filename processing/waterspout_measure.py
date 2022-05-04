@@ -2,12 +2,23 @@ import pyshark
 import time
 import sys
 from pyshark.capture.pipe_capture import PipeCapture
+sys.path.append("../lib")
 
 # InfluxDB related initialization
 from influxdb import InfluxDBClient
 
+# Logging
+import simlogging
+from simlogging import mconsole, logging
+LOGNAME=__name__
+LOGLEV = logging.INFO
+LOGFILE="waterspout_measure.log"
+logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
+
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
+
+UE_IP = '192.168.25.4'
 
 TCP_DB = 'waterspouttcp'
 ICMP_DB = 'waterspouticmp'
@@ -23,7 +34,7 @@ pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128
 
 # Acceptable IP addresses to track for xran or epc
 # TODO: determine if 192.168.25.76 is ever present
-IP_ADDR = ['192.168.25.4', '192.168.25.2', '128.2.208.248']
+IP_ADDR = [UE_IP, '192.168.25.2', CLOUDLET_IP]
 
 def log_packet(pkt):
     """
@@ -51,7 +62,9 @@ def log_packet(pkt):
 
         
         # Adjust the packets if XRAN -> EPC packet
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"seqnum": int(pkt.tcp.seq_raw), "timestamp": int(tcp_timestamp), "acknum": float(tcp_ack), "epoch": float(pkt.frame_info.time_epoch)}}
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"seqnum": int(pkt.tcp.seq_raw), "timestamp": int(tcp_timestamp), 
+                               "acknum": float(tcp_ack), "epoch": float(pkt.frame_info.time_epoch)}}
 
         packets = []
         packets.append(pkt_entry)
@@ -61,14 +74,15 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-
+        
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
-            return
+            icmp_timestamp = "0"
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
+            icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
         except:
             return
 
@@ -76,8 +90,16 @@ def log_packet(pkt):
             epoch = float(pkt.frame_info.time_epoch)
         except:
             return
-
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, "fields":{"data_time": icmp_timestamp, "epoch": epoch, "identifier": icmp_id}}
+        
+        try:
+            icmp_humantime = str(pkt.frame_info.time)
+        except:
+            return
+        
+        mconsole("Writing waterspout ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id)) 
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+                     "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
+                               "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
 
         packets = []
         packets.append(pkt_entry)
