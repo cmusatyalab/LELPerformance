@@ -9,15 +9,8 @@ import pandas as pd
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
-# from pandas.plotting import table
-# import geopandas as gp
-# from shapely.geometry import Point,LineString,Polygon
-# import contextily as ctx
-# from PIL import Image, ImageDraw
-
 
 from pyutils import *
-# from gputils import *
 
 
 defargs = {
