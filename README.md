@@ -56,4 +56,6 @@ docker run --rm -it -p 9099:9099 cmusatyalab/openrtist:stable
 
 - [ ] Instructions for configuring multitech dongle on the UE
 - [ ] Rename *laptop* to *ue*
+- [ ] How to get the interface names for waterspout, laptop, and cloudlet
+- [ ] Setting up chrony and offsets
 - [ ] 
