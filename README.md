@@ -49,7 +49,6 @@ docker run -d -p 3000:3000 grafana/grafana-enterprise
 Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and import processing `dashboard.json` or one of the other dashboards in the grafana folder. Within grafana, add a datasource for InfluxDB. In the datasource, use the IP or domain name of the Cloudlet, not *localhost*. Now, edit each of the panels in the dashboard to use that datasource. Even though the InfluxDB datasource is the default in the imported json, you need to reconnect the datasource to the dashboard for it to access the data.
 
 An example of the *Network Latency Segmentation Summary* dashboard is below.
-
 ![dashboard](grafana/DashboardScreenshot.png)
 
 # OpenRTiST
