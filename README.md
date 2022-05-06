@@ -50,7 +50,7 @@ Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and im
 
 An example of the *Network Latency Segmentation Summary* dashboard is below.
 
-![](grafana/Screenshot from 2022-05-03 14-24-43.png)
+![dashboard](grafana/Screenshot from 2022-05-03 14-24-43.png)
 
 # OpenRTiST
 To run experiments with OpenRTiST (https://github.com/cmusatyalab/openrtist), for TCP measurements, run the following command on the cloudlet:
