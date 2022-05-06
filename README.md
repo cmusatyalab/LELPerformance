@@ -3,12 +3,12 @@
 ## Introduction
 This repository contains the implementation of the Network Latency Segmentation project by Sophie Smith and Ishan Darwhekar in the CMU Mobile and Pervasive Computing 15-821/18-843 course. The project was mentored by Jim Blakley. The video and poster for the project are [here](https://www.cs.cmu.edu/~15-821/archive/#2021). A CMU Technical Report, *"Segmenting Latency in a Private 4G LTE Network"*, is available here<link when published>. This work and the code associated with it is very specific to the network used. As a result, this code will not be useable without modifications for different networks.
 
-The aim of this project is to determine the latency of each segment in the round-trip path of the [Living Edge Lab](https://www.cmu.edu/scs/edgecomputing/index.html) network. To determine segment latency, we inserted probes into the network at the User Equipment (UE), XRAN, EPC and the Cloudlet. 
+The aim of this project is to determine the latency of each segment in the round-trip path of the [Living Edge Lab](https://www.cmu.edu/scs/edgecomputing/index.html) network. To determine segment latency, we inserted probes into the network at the User Equipment (UE aka *laptop*), XRAN, EPC and the Cloudlet. Probes between the XRAN, EPC and Cloudlet were captured by an **Intra-CN** server, *"waterspout"*, that mirrored the ports between the systems.
 
-The `preprocessing` folder contains the scripts used to collect and store latency measurements for preliminary experiments to analyze the effect of different factors on the segment latency. The `processing` folder contains scripts to run for real-time segment latency analysis.
+The `processing` folder contains scripts to run for real-time segment latency analysis. The `preprocessing` folder contains the scripts used to collect and store latency measurements for preliminary experiments to analyze the effect of different factors on the segment latency. 
 
 ## Collecting Latency Measurements
-We receive and inspect each incoming packet using Pyshark (https://github.com/KimiNewt/pyshark), a Python wrapper for Wireshark. From this, we can extract fields necessary to correlate packets at each probe. 
+We receive and inspect each incoming packet using [Pyshark](https://github.com/KimiNewt/pyshark), a Python wrapper for Wireshark. From this, we can extract fields necessary to correlate packets at each probe. 
 
 We use the source and destination IP addresses to identify whether the packet is uplink or downlink and to determine which segment (UE-XRAN, XRAN-EPC, EPC-Cloudlet) they correspond to. To correlate ICMP data, we use the ICMP identifier and ICMP timestamp. To correlate the TCP data, we use the sequence number, TCP timestamp and acknowledgement number We use the differences in epoch time to calculate the segment latency. 
 
@@ -47,6 +47,10 @@ To enable the grafana dashboard, grafana must be running on the Cloudlet. To run
 docker run -d -p 3000:3000 grafana/grafana-enterprise
 ```
 Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and import processing `dashboard.json` or one of the other dashboards in the grafana folder. Within grafana, add a datasource for InfluxDB. In the datasource, use the IP or domain name of the Cloudlet, not *localhost*. Now, edit each of the panels in the dashboard to use that datasource. Even though the InfluxDB datasource is the default in the imported json, you need to reconnect the datasource to the dashboard for it to access the data.
+
+An example of the *Network Latency Segmentation Summary* dashboard is below.
+
+![](C:\Users\jimbl\Git\NetworkLatencySegmentation\grafana\Screenshot from 2022-05-03 14-24-43.png)
 
 # OpenRTiST
 To run experiments with OpenRTiST (https://github.com/cmusatyalab/openrtist), for TCP measurements, run the following command on the cloudlet:
