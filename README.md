@@ -1,9 +1,9 @@
 # NetworkLatencySegmentation
 
 ## Introduction
-This repository contains the implementation of the Network Latency Segmentation project by Sophie Smith and Ishan Darwhekar in 15-821/18-843. The project was mentored by Jim Blakley. 
+This repository contains the implementation of the Network Latency Segmentation project by Sophie Smith and Ishan Darwhekar in the CMU Mobile and Pervasive Computing 15-821/18-843 course. The project was mentored by Jim Blakley. The video and poster for the project are [here](https://www.cs.cmu.edu/~15-821/archive/#2021). A CMU Technical Report, *"Segmenting Latency in a Private 4G LTE Network"*, is available here<link when published>. This work and the code associated with it is very specific to the network used. As a result, this code will not be useable without modifications for different networks.
 
-The aim of this project is to determine the latency of each segment in the round-trip path of the Living Edge Lab network. To determine segment latency, we inserted probes into the network at the User Equipment (UE), XRAN, EPC and the Cloudlet. The Cloudlet used was Cloudlet39. 
+The aim of this project is to determine the latency of each segment in the round-trip path of the [Living Edge Lab](https://www.cmu.edu/scs/edgecomputing/index.html) network. To determine segment latency, we inserted probes into the network at the User Equipment (UE), XRAN, EPC and the Cloudlet. 
 
 The `preprocessing` folder contains the scripts used to collect and store latency measurements for preliminary experiments to analyze the effect of different factors on the segment latency. The `processing` folder contains scripts to run for real-time segment latency analysis.
 
@@ -21,6 +21,8 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 ```
+
+The interface names will be specific to the network used.
 
 Note that adding ```not tcp and not sctp``` to the *tcpdump* command helps to filter out the overwhelming amount of  TCP and SCTP traffic that is spurious if you're only interested in ICMP ping data.
 
@@ -56,6 +58,6 @@ docker run --rm -it -p 9099:9099 cmusatyalab/openrtist:stable
 
 - [ ] Instructions for configuring multitech dongle on the UE
 - [ ] Rename *laptop* to *ue*
-- [ ] How to get the interface names for waterspout, laptop, and cloudlet
+- [x] How to get the interface names for waterspout, laptop, and cloudlet
 - [ ] Setting up chrony and offsets
 - [ ] 
