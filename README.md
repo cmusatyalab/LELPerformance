@@ -1,7 +1,9 @@
-# NetworkLatencySegmentation
+
+
+# Network Latency Segmentation Project
 
 ## Introduction
-This repository contains the implementation of the Network Latency Segmentation project by Sophie Smith and Ishan Darwhekar in the CMU Mobile and Pervasive Computing 15-821/18-843 course. The project was mentored by Jim Blakley. The video and poster for the project are [here](https://www.cs.cmu.edu/~15-821/archive/#2021). A CMU Technical Report, *"Segmenting Latency in a Private 4G LTE Network"*, is available here<link when published>. This work and the code associated with it is very specific to the network used. As a result, this code will not be useable without modifications for different networks.
+This repository contains the implementation of the  [Living Edge Lab](https://www.cmu.edu/scs/edgecomputing/index.html)  Network Latency Segmentation project by Sophie Smith and Ishan Darwhekar in the CMU Mobile and Pervasive Computing 15-821/18-843 course. The project was mentored by Jim Blakley. The video and poster for the project are [here](https://www.cs.cmu.edu/~15-821/archive/#2021). A CMU Technical Report, *"Segmenting Latency in a Private 4G LTE Network"*, is available here<link when published>. This work and the code associated with it is very specific to the network used. As a result, this code will not be directly useable on other networks without modifications.
 
 The aim of this project is to determine the latency of each segment in the round-trip path of the [Living Edge Lab](https://www.cmu.edu/scs/edgecomputing/index.html) network. To determine segment latency, we inserted probes into the network at the User Equipment (UE aka *laptop*), XRAN, EPC and the Cloudlet. Probes between the XRAN, EPC and Cloudlet were captured by an **Intra-CN** server, *"waterspout"*, that mirrored the ports between the systems.
 
@@ -22,7 +24,7 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 ```
 
-The interface names will be specific to the network used.
+The interface names will be specific to the network used. They can be obtained with the `ip a` command on linux systems. We used a Multitech USB dongle to connect the laptop to our CBRS network. Configuring that dongle on Linux required adding it to the `netplan` configuration. (See the dongle.cfg file for more details.)
 
 Note that adding ```not tcp and not sctp``` to the *tcpdump* command helps to filter out the overwhelming amount of  TCP and SCTP traffic that is spurious if you're only interested in ICMP ping data.
 
@@ -34,6 +36,7 @@ python3 query_measurements.py
 ```
 
 ## InfluxDB
+
 To store all values above, InfluxDB must be running on the Cloudlet. The Cloudlet is the location where all databases are stored. To run InfluxDB, run the following command on the Cloudlet:
 
 ```
@@ -51,16 +54,20 @@ Connect to grafana at http://localhost:3000/, login with admin, pw=admin, and im
 An example of the *Network Latency Segmentation Summary* dashboard is below.
 ![dashboard](grafana/DashboardScreenshot.png)
 
+# Synchronization
+To provide accurate segmentation all timing elements -- UE (laptop), Intra-CN Probe (waterspout) and the cloudlet -- must be synchronized to the same timing source. We used an NTP timing source within our lab to synchronize the UE and Intra-CN Probe. The cloudlet was synced using a PTP server on the same clock as the NTP source.
+
+We used `chrony` on the UE for synchronization and for measuring offsets between UE and the other elements. To run the offset measurement collector on the UE:
+``` 
+python3 laptop_offset.py
+```
+
+We did not have success running the synchronization setup on a Windows UE (either with `chrony` or `w32tm /stripchart`). 
+
 # OpenRTiST
+
 To run experiments with OpenRTiST (https://github.com/cmusatyalab/openrtist), for TCP measurements, run the following command on the cloudlet:
 
 ```
 docker run --rm -it -p 9099:9099 cmusatyalab/openrtist:stable
 ```
-# TODO
-
-- [ ] Instructions for configuring multitech dongle on the UE
-- [ ] Rename *laptop* to *ue*
-- [x] How to get the interface names for waterspout, laptop, and cloudlet
-- [ ] Setting up chrony and offsets
-- [ ] 
