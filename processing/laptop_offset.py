@@ -34,6 +34,7 @@ CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 NTPSERVER = "0.north-america.pool.ntp.org"
 NTPSERVER = "north-america.pool.ntp.org"
+NTPSERVER = "pugot.canonical.com"
 NTPSERVER = "labgw.elijah.cs.cmu.edu"
 BATCHSIZE = 20
 SLEEPTIME = 3
@@ -92,6 +93,8 @@ def getBatch(ntpserver = NTPSERVER, batchsize = BATCHSIZE,output = False):
 
 def parseBatch(btch,ntpserver = NTPSERVER):
     retdict = {}
+    MINLINELEN = 11
+    O2REGEX = re.compile("\[.*\]")
     today = datetime.datetime.now().strftime('%Y-%m-%d')
     ''' Parse windows (w32tm /stripchart) '''
     if OSNAME == "WINDOWS":
@@ -105,22 +108,29 @@ def parseBatch(btch,ntpserver = NTPSERVER):
     elif OSNAME == "LINUX":
         for line in btch:
             lnlst = line.split()
-            if len(lnlst) < 11:
+            if len(lnlst) < MINLINELEN:
                 # mconsole("Bad offset line: {}".format(line),level="ERROR")
                 continue
-            o = lnlst[8]
-            if o.endswith("ns]"): oo = float(o[:-3]) * 1e-9
-            elif o.endswith("us]"): oo = float(o[:-3]) * 1e-6
-            elif o.endswith("ms]"): oo = float(o[:-3]) * 1e-3
             d = lnlst[0][:-6]
             ds = TZ.localize(datetime.datetime.strptime(d,"%Y-%m-%dT%H:%M:%S"))
-            e = lnlst[10]
+            o = lnlst[7]
+            if o.endswith("ns"): oo = float(o[:-2]) * 1e-9
+            elif o.endswith("us"): oo = float(o[:-2]) * 1e-6
+            elif o.endswith("ms"): oo = float(o[:-2]) * 1e-3
+
+            e = lnlst[-1]
             if e.endswith("ns"): ee = float(e[:-2]) * 1e-9
             elif e.endswith("us"): ee = float(e[:-2]) * 1e-6
             elif e.endswith("ms"): ee = float(e[:-2]) * 1e-3
             retdict[ds] = [oo,ee]
-            pass
-    retdf = pd.DataFrame.from_dict(retdict,orient='index',columns=['OFFSET','ERROR'])
+            
+            o2 = O2REGEX.findall(line)[0][1:-1] if O2REGEX.search(line) is not None else "[0]"
+            if o2.endswith("ns"): oo2 = float(o2[:-2]) * 1e-9
+            elif o2.endswith("us"): oo2 = float(o2[:-2]) * 1e-6
+            elif o2.endswith("ms"): oo2 = float(o2[:-2]) * 1e-3
+            retdict[ds] = [oo,oo2,ee]
+            
+    retdf = pd.DataFrame.from_dict(retdict,orient='index',columns=['OFFSET','OFFSET2','ERROR'])
     retdf.index.name = 'TIMESTAMP'
     retdf['NTPSERVER'] = ntpserver
     
@@ -131,7 +141,7 @@ def writeInfluxDB(row,client = None):
              .format(row.OFFSET,row.TIMESTAMP,row.NTPSERVER,OSNAME), level="DEBUG") 
     pkt_entry = {"measurement":MEASURENAME,
                  "tags": {"ntpserver": row['NTPSERVER'],'TIMESTAMP':row.TIMESTAMP,'ostype':OSNAME}, 
-                 "fields":{"offset": row['OFFSET'],'error':row['ERROR']},"time":int(row.TIMESTAMP.timestamp())}
+                 "fields":{"offset": row['OFFSET'],"offset2": row['OFFSET2'],'error':row['ERROR']},"time":int(row.TIMESTAMP.timestamp())}
     client.write_points([pkt_entry], time_precision = 's')
 
 if __name__ == '__main__': main()
