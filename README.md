@@ -28,6 +28,12 @@ The interface names will be specific to the network used. They can be obtained w
 
 Note that adding ```not tcp and not sctp``` to the *tcpdump* command helps to filter out the overwhelming amount of  TCP and SCTP traffic that is spurious if you're only interested in ICMP ping data.
 
+To monitor from within the XRAN server itself, you'd need xran credentials. For our xran,
+
+```
+sshpass -p <XRANIP> ssh <XRANLOGIN>@<XRANIP> "sudo tcpdump -s 0 -U -w - -i any not port 22" | python xran_measure.py
+```
+
 ## Latency Segmentation Calculations
 We use the `query_measurements.py` script to calculate segment latency from extracted fields for each probe and upload them to a separate database. The commands to run this script are: 
 
