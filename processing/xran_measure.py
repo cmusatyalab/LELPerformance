@@ -17,15 +17,15 @@ LOGNAME=__name__
 LOGLEV = logging.INFO
 LOGFILE="laptop_measure.log"
 logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
-
+               
 CLOUDLET_IP = '128.2.208.248'
 CLOUDLET_PORT = 8086
 UE_IP = '192.168.25.80'
 XRAN_IP = "192.168.25.2"
 
-TCP_DB = 'uetcp'
-ICMP_DB = 'ueicmp'
-FIFO_NAME = '/home/jblake1/xranfifo'
+TCP_DB = 'xrantcp'
+ICMP_DB = 'xranicmp'
+FIFO_NAME = '{}/xranfifo'.format(os.environ['HOME'])
 
 # Command line processing
 parser = OptionParser(usage="usage: %prog [options]")
@@ -128,8 +128,8 @@ def log_packet(pkt):
 
         # Write to ICMP database
         icmp_client.write_points(packets)
-    else:
-        mconsole("Other IP Packet {}".format(vars(pkt)))
+    # else:
+    #     mconsole("Other IP Packet {}".format(vars(pkt)))
 
 pipecap.apply_on_packets(log_packet)
 
