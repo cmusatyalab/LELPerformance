@@ -97,7 +97,7 @@ def log_packet(pkt):
 
     elif "ICMP" in pkt:
         # mconsole("logging ICMP packet")
-        mconsole("1: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        mconsole("1: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst),level="DEBUG")
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
@@ -118,7 +118,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        mconsole("Writing UE ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
+        mconsole("Writing XRAN ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                     "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
