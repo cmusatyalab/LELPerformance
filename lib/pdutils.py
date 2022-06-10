@@ -131,8 +131,8 @@ def convTS(fdf):  # InfluxDB timestamps to a pandas timestamp
 
 def epochToTS(fdf,epochcol='epoch',newtz='America/New_York',tscol = 'TIMESTAMP'):
     ''' Linux epoch in seconds to Timestamp '''
-    fdf[tscol] = pd.to_datetime(fdf['epoch'],unit='s',utc=True)
-    fdf = changeTZ(fdf,col=tscol,origtz='UTC', newtz=TZ)
+    fdf[tscol] = pd.to_datetime(fdf[epochcol],unit='s',utc=True)
+    fdf = changeTZ(fdf,col=tscol,origtz='UTC', newtz=newtz)
     return fdf
 
 def writejoin(df,dn,fn):
