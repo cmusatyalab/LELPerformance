@@ -35,6 +35,9 @@ parser.add_option("-f", "--fifo",
 parser.add_option("-O", "--tcpoff",
     action="store_true", dest="tcpoff", default=False,
     help="Turn off tcp capture")
+parser.add_option("-I", "--influxoff",
+    action="store_true", dest="influxoff", default=False,
+    help="Turn off tcp capture")
 parser.add_option("-F", "--filename", dest="filename",
     help="take input from pcap file", metavar="FILE")
 
@@ -118,16 +121,32 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        mconsole("Writing XRAN ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))
-        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
+        ''' GTP Data '''
+        gtp_src = "NA"
+        gtp_dst = "NA"
+        for ii,layer in enumerate(pkt.layers):
+            if layer.layer_name == 'ip' and layer.src != pkt.ip.src:
+                gtp_src = layer.src
+                gtp_dst = layer.dst
+                break
+                
+        pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src, 
+                                                      "gtp_dst":gtp_dst, "gtp_src":gtp_src,}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                     "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
-        # print(pkt_entry)
         packets = []
         packets.append(pkt_entry)
 
         # Write to ICMP database
-        icmp_client.write_points(packets)
+        if not kwargs['influxoff']:
+            mconsole("Writing XRAN ICMP measurement -- SRC: {} DST: {} \n\t\
+                    GTP SRC: {} GTP DST: {} SEQUENCE: {}" \
+                     .format(pkt.ip.src,pkt.ip.dst,gtp_src,gtp_dst,icmp_seq))
+            icmp_client.write_points(packets)
+        else:
+            mconsole("Not writing XRAN ICMP measurement -- SRC: {} DST: {} \n\t\
+                    GTP SRC: {} GTP DST: {} SEQUENCE: {}" \
+                     .format(pkt.ip.src,pkt.ip.dst,gtp_src,gtp_dst,icmp_seq))
     # else:
     #     mconsole("Other IP Packet {}".format(vars(pkt)))
 
