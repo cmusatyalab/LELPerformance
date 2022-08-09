@@ -14,18 +14,16 @@ sudo usermod -aG sudo jblake1
 sudo apt update && sudo apt upgrade -y
 
 # Preliminary installs
-sudo apt install -y wireguard resolveconf
+sudo apt install -y wireguard resolvconf
 
 #------------------------------------------------------------------------------------
 # WIREGUARD
 
-# Magma VPN
-
-VPN_NUM=0
+VPN_NUM=3
 SELF_ENDPOINT=${HOST_IP}
-LISTEN_PORT=50010
+LISTEN_PORT=5001${VPN_NUM}
 SELF_PEER_LABEL="AZURE_STACK"
-SELF_IP_ADDR=192.168.1.12
+SELF_IP_ADDR=192.168.25.51
 DNS="128.2.208.222, 8.8.8.8"
 ALLOWED="$SELF_IP_ADDR/32"
 
@@ -45,6 +43,7 @@ sudo cp wg${VPN_NUM}_*.key /etc/wireguard/
 
 (echo "[Interface]
 PrivateKey = $(sudo cat $PRIV_KEY_FN)
+# PublicKey = $(sudo cat $PUB_KEY_FN)
 Address = $SELF_IP_ADDR
 ListenPort = $LISTEN_PORT
 SaveConfig = true
@@ -59,6 +58,10 @@ Endpoint = $SELF_ENDPOINT:$LISTEN_PORT") > ${PEER_FN}
 # Stop wireguard before changing config -- else overwritten
 
 sudo cp $CONF_FN /etc/wireguard
-# sudo systemctl enable wg-quick@wg${VPN_NUM}.service # Server Only
-# sudo systemctl start wg-quick@wg${VPN_NUM}.service # Server Only
+sudo systemctl enable wg-quick@wg${VPN_NUM}.service # Server Only
+sudo systemctl start wg-quick@wg${VPN_NUM}.service # Server Only
 sudo wg-quick up wg${VPN_NUM}
+sudo wg show
+
+# ---------------------------------------------------------------------------------------------
+
