@@ -9,7 +9,6 @@
 	"CLOUDLET": {
 		"logfile":"cloudlet_measure.log",
 		"eclipse_debug": false,
-		"cloudlet_port":"8086",
 		"tcp_db":"cloudlettcp",
 		"icmp_db":"cloudleticmp",
 		"fifo_name":"clfifo"
@@ -20,7 +19,10 @@
 		"icmp_db":"waterspouticmp"
 	},
 	"UE": {
-	}
+		"logfile":"laptop_measure.log",
+		"tcp_db":"uetcp",
+		"icmp_db":"ueicmp"
+		}
 }
 
 

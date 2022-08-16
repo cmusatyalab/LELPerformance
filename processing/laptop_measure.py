@@ -3,6 +3,8 @@ import time
 import sys
 import os
 import pyshark
+import json
+
 from pyshark.capture.pipe_capture import PipeCapture
 sys.path.append("../lib")
 
@@ -11,57 +13,73 @@ from optparse import OptionParser
 
 # Logging
 import simlogging
+
 from simlogging import mconsole, logging
-LOGNAME=__name__
-LOGLEV = logging.INFO
-LOGFILE="laptop_measure.log"
-logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
 
-CLOUDLET_IP = '128.2.208.248'
-CLOUDLET_PORT = 8086
-UE_IP = '192.168.25.80'
+from local_common import createDB,getDBs
 
-TCP_DB = 'uetcp'
-ICMP_DB = 'ueicmp'
-FIFO_NAME = './uefifo'
+def main():
+    global IP_ADDR
+    global icmp_client
+    
+    configfn = "config.json"
+    cnf = {}; ccnf = {};gcnf = {}
+    if configfn is not None and os.path.isfile(configfn):
+        with open(configfn) as f:
+            cnf = json.load(f)
+            ucnf = cnf['UE']
+            gcnf = cnf['GENERAL']
+    LOGNAME=__name__
+    LOGLEV = logging.INFO
+    ''' Assure values for all parameters '''
+    ''' laptop related '''
+    key = "logfile"; LOGFILE= ucnf[key] if key in ucnf else "laptop_measure.log"
+    key = "tcp_db"; TCP_DB = ucnf[key] if key in ucnf else "uetcp"
+    key = "icmp_db"; ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"
+    
+    ''' General '''
+    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
+    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
+    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
+    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
+    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
+    key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
 
-CMD = "..\WinDump -i 4 -w - -U -s 0 icmp |python laptop_measure.py"
-# Interface 4 when on JMA network with Multitech
-
-# Command line processing
-parser = OptionParser(usage="usage: %prog [options]")
-parser.add_option("-f", "--fifo",
-    action="store_true", dest="fifo", default=False,
-    help="Use a named pipe (fifo) instead of stdin")
-parser.add_option("-O", "--tcpoff",
-    action="store_true", dest="tcpoff", default=False,
-    help="Turn off tcp capture")
-parser.add_option("-F", "--filename", dest="filename",
-    help="take input from pcap file", metavar="FILE")
-
-(options,args) = parser.parse_args()
-kwargs = options.__dict__.copy()
-
-# InfluxDB related initialization
-tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
-tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
-
-icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
-icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
-
-# Filter for cloudlet packets to limit traffic to parse
-
-if kwargs['fifo']:
-    uefifo = os.open(FIFO_NAME, os.O_RDONLY) # Get from fifo
-elif kwargs['filename'] is not None:
-    uefifo = open(kwargs['filename'], 'r')
-else:
+    CMD = "..\WinDump -i 4 -w - -U -s 0 icmp |python laptop_measure.py"
+    # Interface 4 when on JMA network with Multitech
+    
+    # Command line processing
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-f", "--fifo",
+        action="store_true", dest="fifo", default=False,
+        help="Use a named pipe (fifo) instead of stdin")
+    parser.add_option("-O", "--tcpoff",
+        action="store_true", dest="tcpoff", default=False,
+        help="Turn off tcp capture")
+    parser.add_option("-F", "--filename", dest="filename",
+        help="take input from pcap file", metavar="FILE")
+    
+    (options,args) = parser.parse_args()
+    kwargs = options.__dict__.copy()
+    
+    # InfluxDB related initialization
+    mconsole("Connecting to influxdb on cloudlet {}:{}".format(INFLUXDB_IP,INFLUXDB_PORT))
+    tcp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=TCP_DB)
+    if createDB(tcp_client, TCP_DB): tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
+    
+    icmp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=ICMP_DB)
+    if createDB(icmp_client, ICMP_DB): icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
+    
+    # Filter for cloudlet packets to limit traffic to parse
     uefifo = sys.stdin
-
-pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == {}".format(CLOUDLET_IP))
-
-# Acceptable IP addresses to track for UE or cloudlet
-IP_ADDR = ['192.168.25.52', CLOUDLET_IP, UE_IP,'172.26.25.174']
+    
+    pipecap = PipeCapture(pipe=uefifo, debug=True, display_filter="ip.addr == {}".format(CLOUDLET_IP))
+    
+    # Acceptable IP addresses to track for UE or cloudlet
+    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
+    
+    pipecap.apply_on_packets(log_packet)
 
 def log_packet(pkt):
     """
@@ -127,6 +145,7 @@ def log_packet(pkt):
         # Write to ICMP database
         icmp_client.write_points(packets)
 
-pipecap.apply_on_packets(log_packet)
 
 
+
+if __name__ == '__main__': main()
