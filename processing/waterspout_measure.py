@@ -10,31 +10,48 @@ from influxdb import InfluxDBClient
 # Logging
 import simlogging
 from simlogging import mconsole, logging
-LOGNAME=__name__
-LOGLEV = logging.INFO
-LOGFILE="waterspout_measure.log"
-logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
 
-CLOUDLET_IP = '128.2.208.248'
-CLOUDLET_PORT = 8086
+def main():
+    global IP_ADDR
+    global icmp_client
+    
+    configfn = "config.json"
+    cnf = {}; ccnf = {};gcnf = {}
+    if configfn is not None and os.path.isfile(configfn):
+        with open(configfn) as f:
+            cnf = json.load(f)
+            wcnf = cnf['WATERSPOUT']
+            gcnf = cnf['GENERAL']
+    LOGNAME=__name__
+    LOGLEV = logging.INFO
+    
+    ''' Waterspout related '''
+    key = "logfile"; LOGFILE= wcnf[key] if key in wcnf else "waterspout_measure.log"
+    key = "tcp_db"; TCP_DB = wcnf[key] if key in wcnf else "waterspouttcp"
+    key = "icmp_db"; ICMP_DB = wcnf[key] if key in wcnf else "waterspouticmp"
 
-UE_IP = '192.168.25.4'
+    ''' General '''
+    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
+    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
+    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
+    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
+    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
 
-TCP_DB = 'waterspouttcp'
-ICMP_DB = 'waterspouticmp'
-
-tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
-tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
-
-icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
-icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
-
-# Filter for cloudlet packets to limit traffic to parse
-pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
-
-# Acceptable IP addresses to track for xran or epc
-# TODO: determine if 192.168.25.76 is ever present
-IP_ADDR = [UE_IP, '192.168.25.2', CLOUDLET_IP]
+    LOGFILE="waterspout_measure.log"
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
+    
+    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
+    tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
+    
+    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
+    icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
+    
+    # Filter for cloudlet packets to limit traffic to parse
+    pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
+    
+    # Acceptable IP addresses to track for xran or epc
+    # TODO: determine if 192.168.25.76 is ever present
+    IP_ADDR = [UE_IP, '192.168.25.2', CLOUDLET_IP]
 
 def log_packet(pkt):
     """
