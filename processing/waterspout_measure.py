@@ -50,8 +50,9 @@ def main():
     pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
     
     # Acceptable IP addresses to track for xran or epc
-    # TODO: determine if 192.168.25.76 is ever present
-    IP_ADDR = [UE_IP, '192.168.25.2', CLOUDLET_IP]
+    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
+    
+    pipecap.apply_on_packets(log_packet)
 
 def log_packet(pkt):
     """
@@ -126,6 +127,6 @@ def log_packet(pkt):
 
 
         
-pipecap.apply_on_packets(log_packet)
+
 
 
