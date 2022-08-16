@@ -1,6 +1,9 @@
 import pyshark
 import time
 import sys
+import os
+import json
+
 from pyshark.capture.pipe_capture import PipeCapture
 sys.path.append("../lib")
 
@@ -41,10 +44,10 @@ def main():
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     
     mconsole("Connecting to influxdb on cloudlet {}:{}".format(CLOUDLET_IP,INFLUXDB_PORT))
-    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
+    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=TCP_DB)
     if createDB(tcp_client, TCP_DB): tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
     
-    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
+    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=ICMP_DB)
     if createDB(icmp_client, ICMP_DB): icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
     
     # Filter for cloudlet packets to limit traffic to parse
