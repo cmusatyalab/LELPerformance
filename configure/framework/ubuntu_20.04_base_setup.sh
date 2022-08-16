@@ -14,7 +14,7 @@ sudo usermod -aG sudo jblake1
 sudo apt update && sudo apt upgrade -y
 
 # Preliminary installs
-sudo apt install -y wireguard resolvconf
+sudo apt install -y wireguard resolvconf tshark
 
 #------------------------------------------------------------------------------------
 # WIREGUARD

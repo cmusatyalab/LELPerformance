@@ -1,0 +1,22 @@
+{
+	"GENERAL": {
+		"lelgw_ip":"128.2.212.53",
+		"epc_ip":"192.168.25.4"
+	},
+	"CLOUDLET": {
+		"logfile":"cloudlet_measure.log",
+		"eclipse_debug": false,
+		"cloudlet_ip":"172.31.0.10",
+		"cloudlet_port":"8086",
+		"tcp_db":"cloudlettcp",
+		"icmp_db":"cloudleticmp",
+		"fifo_name":"clfifo"
+	},
+	"WATERSPOUT":{
+	},
+	"UE": {
+	}
+}
+
+
+    
