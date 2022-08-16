@@ -99,8 +99,6 @@ def log_packet(pkt):
         
 
     elif "ICMP" in pkt:
-        # mconsole("logging ICMP packet")
-        mconsole("1: ICMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst),level="DEBUG")
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
         except:
@@ -147,8 +145,8 @@ def log_packet(pkt):
             mconsole("Not writing XRAN ICMP measurement -- SRC: {} DST: {} \n\t\
                     GTP SRC: {} GTP DST: {} SEQUENCE: {}" \
                      .format(pkt.ip.src,pkt.ip.dst,gtp_src,gtp_dst,icmp_seq))
-    # else:
-    #     mconsole("Other IP Packet {}".format(vars(pkt)))
+    else:
+        mconsole("Other IP Packet {}".format(vars(pkt)))
 
 pipecap.apply_on_packets(log_packet)
 
