@@ -34,9 +34,6 @@ def main():
     ''' Cloudlet related '''
     key = "logfile"; LOGFILE= ccnf[key] if key in ccnf else "cloudlet_measure.log"
     key = "eclipse_debug"; ECLIPSE_DEBUG = ccnf[key] if key in ccnf else False
-    key = "cloudlet_ip" ; CLOUDLET_IP = ccnf[key] if key in ccnf else "128.2.208.248"
-    key = "ue_ip"; UE_IP = ccnf[key] if key in ccnf else "172.26.21.132"
-    key = "cloudlet_port"; CLOUDLET_PORT = ccnf[key] if key in ccnf else 8086
     key = "tcp_db"; TCP_DB = ccnf[key] if key in ccnf else "cloudlettcp"
     key = "icmp_db"; ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
     key = "fifo_name"; FIFO_NAME = ccnf[key] if key in ccnf else "clfifo"
@@ -44,6 +41,9 @@ def main():
     ''' General '''
     key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
     key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
+    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
+    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
+    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
     
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     
@@ -58,12 +58,12 @@ def main():
     kwargs = options.__dict__.copy()
     
     ''' Initialize clients to access Cloudlet TCP and ICMP databases '''
-    mconsole("Connecting to influxdb on cloudlet {}:{}".format(CLOUDLET_IP,CLOUDLET_PORT))
-    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
+    mconsole("Connecting to influxdb on cloudlet {}:{}".format(CLOUDLET_IP,INFLUXDB_PORT))
+    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=TCP_DB)
     if createDB(tcp_client, TCP_DB):       
         tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
     
-    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
+    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=ICMP_DB)
     if createDB(icmp_client, ICMP_DB):
         icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
     
