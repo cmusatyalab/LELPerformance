@@ -61,7 +61,7 @@ def log_packet(pkt):
     Extracts fields needed to correlate packets across each probe and insert into
     TCP or ICMP database
     """
-
+    print("LOG_PACKET-- {}".format(pkt))
     if "TCP" in pkt:
 
         # Skip the packet if not related to xran or epc
