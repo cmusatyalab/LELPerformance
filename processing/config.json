@@ -4,7 +4,8 @@
 		"epc_ip":"192.168.25.4",
 		"cloudlet_ip":"172.31.0.10",
 		"influxdb_ip":"128.2.222.37",
-		"influxdb_port":"8086"
+		"influxdb_port":"8086",
+		"timezone":"America/New_York"
 	},
 	"CLOUDLET": {
 		"logfile":"cloudlet_measure.log",
@@ -22,7 +23,12 @@
 		"logfile":"laptop_measure.log",
 		"tcp_db":"uetcp",
 		"icmp_db":"ueicmp"
-		}
+		},
+	"QUERY": {
+		"logfile":"query_measurments.log",
+		"seg_db":"segmentation",
+		"offset_db":"winoffset"
+	}
 }
 
 

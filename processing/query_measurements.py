@@ -4,6 +4,7 @@ import sys
 
 sys.path.append("../lib")
 import os
+import json
 from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from pdpltutils import *
 from optparse import OptionParser
 import simlogging
 from simlogging import mconsole
+
 ''' 
     This program collects latency measurements from the UE, waterspout and cloudlet influxdb databases,
     aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
@@ -24,18 +26,6 @@ from simlogging import mconsole
 LOGNAME=__name__
 LOGLEV = logging.INFO
 
-''' Hardcode cloudlet IP and port for DB '''
-CLOUDLET_IP = '128.2.208.248'
-EPC_IP = '192.168.25.4'
-CLOUDLET_PORT = 8086
-TZ = 'America/New_York'
-
-''' Influxdb databases ''' 
-CLOUDLET_ICMP_DB = 'cloudleticmp'
-WATERSPOUT_ICMP_DB = 'waterspouticmp'
-UE_ICMP_DB = 'ueicmp'
-SEG_DB = 'segmentation'
-OFFSET_DB = 'winoffset'
 
 ''' For labeling segments '''
 legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
@@ -48,8 +38,35 @@ def main():
     global logger
     global blacklist
     
+    configfn = "config.json"
+    cnf = {}; ccnf = {};gcnf = {}
+    if configfn is not None and os.path.isfile(configfn):
+        with open(configfn) as f:
+            cnf = json.load(f)
+            qcnf = cnf['QUERY']
+            gcnf = cnf['GENERAL']
+            ucnf = cnf['UE']
+            ccnf = cnf['CLOUDLET']
+            wcnf = cnf['WATERSPOUT']
+    ''' General '''
+    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
+    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
+    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
+    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
+    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
+    key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
+    key = "timezone"; TZ = gcnf[key] if key in gcnf else "America/New_York"
+    key = "seg_db"; SEG_DB = gcnf[key] if key in gcnf else "segmentation"
+    key = "offset_db"; OFFSET_DB = gcnf[key] if key in gcnf else "winoffset"
+    
+    ''' necessary node specific '''
+    key = "logfile"; LOGFILE= qcnf[key] if key in qcnf else "query_measurments.log"
+    key = "icmp_db"; CLOUDLET_ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
+    key = "icmp_db"; WATERSPOUT_ICMP_DB = wcnf[key] if key in wcnf else "cloudleticmp"
+    key = "icmp_db"; UE_ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"
+    
     ''' Logging '''
-    LOGFILE="query_measurments.log"
+
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
@@ -62,7 +79,7 @@ def main():
         else: return False
         
     ''' Get the database client '''
-    seg_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+    seg_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     firsttime = True
     
     ''' Now keep looping '''
@@ -176,7 +193,7 @@ def cmdOptions():
     
 def checkAgainstCurrent(newdf):
     ''' Is the sequence already in the database '''
-    df_seg_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=SEG_DB)
+    df_seg_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     measure = 'uplink'
     try:
         seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
@@ -191,9 +208,9 @@ def checkAgainstBlacklist(indf):
 
 def getLatencyData():
     ''' Get all the clients '''
-    df_cloudlet_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=CLOUDLET_ICMP_DB)
-    df_waterspout_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=WATERSPOUT_ICMP_DB)
-    df_ue_icmp_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=UE_ICMP_DB)
+    df_cloudlet_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=CLOUDLET_ICMP_DB)
+    df_waterspout_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=WATERSPOUT_ICMP_DB)
+    df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
                                         
     ''' Query the different network nodes' data '''
     measure = 'latency'
@@ -235,7 +252,7 @@ def getLatencyData():
 
 def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset = True):
     TZ = 'America/New_York'
-    df_offset_client = DataFrameClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=OFFSET_DB)
+    df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
     offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
     ''' Filter by ts boundaries '''
     tdfx = offset_df.copy()
