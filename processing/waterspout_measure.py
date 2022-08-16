@@ -39,15 +39,16 @@ def main():
     key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
     key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
     key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
+    key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
 
     LOGFILE="waterspout_measure.log"
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     
-    mconsole("Connecting to influxdb on cloudlet {}:{}".format(CLOUDLET_IP,INFLUXDB_PORT))
-    tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=TCP_DB)
+    mconsole("Connecting to influxdb on cloudlet {}:{}".format(INFLUXDB_IP,INFLUXDB_PORT))
+    tcp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=TCP_DB)
     if createDB(tcp_client, TCP_DB): tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
     
-    icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=INFLUXDB_PORT, database=ICMP_DB)
+    icmp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=ICMP_DB)
     if createDB(icmp_client, ICMP_DB): icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
     
     # Filter for cloudlet packets to limit traffic to parse
