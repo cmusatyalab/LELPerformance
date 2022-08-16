@@ -40,14 +40,15 @@ def main():
     LOGFILE="waterspout_measure.log"
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     
+    mconsole("Connecting to influxdb on cloudlet {}:{}".format(CLOUDLET_IP,INFLUXDB_PORT))
     tcp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=TCP_DB)
-    tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
+    if createDB(tcp_client, TCP_DB): tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
     
     icmp_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=ICMP_DB)
-    icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
+    if createDB(icmp_client, ICMP_DB): icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
     
     # Filter for cloudlet packets to limit traffic to parse
-    pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == 128.2.208.248")
+    pipecap = PipeCapture(pipe=sys.stdin, debug=True, display_filter="ip.addr == {}".format(CLOUDLET_IP))
     
     # Acceptable IP addresses to track for xran or epc
     IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
@@ -126,7 +127,31 @@ def log_packet(pkt):
         icmp_client.write_points(packets)
 
 
-        
+def getDBs(client):
+    response = client.query("show databases")
+    try:
+        dbs = [db[0] for db in response.raw['series'][0]['values']]
+        return dbs
+    except:
+        mconsole("Could not parse influxdb database list: {}".format(response),level="ERROR")
+    return None
+
+def createDB(client,dbname):
+    dbs = getDBs(client)
+    if dbs is not None and len(dbs) > 0 and dbname in dbs:
+        ''' Check openrtistdb influxdb '''
+        mconsole("Database {} exists in influxdb".format(dbname))
+        return True
+    else:
+        mconsole("Creating database {} in influxdb".format(dbname))
+        client.create_database(dbname)
+        client.alter_retention_policy("autogen", database=dbname, duration="30d", default=True)
+        client.create_retention_policy('DefaultRetentionPolicy', '365d', "3", database = dbname, default=True)
+        dbs = getDBs(client)
+        if not dbname in dbs:
+            mconsole("Could not create: {}".format(DBNAME),level="ERROR")
+            return False
+    return True
 
 
 
