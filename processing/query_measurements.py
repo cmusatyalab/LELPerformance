@@ -18,24 +18,18 @@ from pdpltutils import *
 from optparse import OptionParser
 import simlogging
 from simlogging import mconsole
+from local_common import *
+
 
 ''' 
     This program collects latency measurements from the UE, waterspout and cloudlet influxdb databases,
     aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
 '''
 
-
-''' For labeling segments '''
-legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
-           7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
-
-''' For bad sequences '''
-blacklist = []
-
 def main():
     ''' INITIALIZATION '''
+    global blacklist
     kwargs = configure()
-    
     ''' Logging '''
     loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = loglev,coloron=False)
@@ -43,11 +37,13 @@ def main():
     firsttime = True
     
     ''' END INITIALIZATION '''
+    
     mconsole("Starting querying")
     
     ''' Now keep looping '''
     while True:
         if not firsttime: time.sleep(int(kwargs['sleeptime']))
+        else: createDB(seg_client,SEG_DB) # Only creates if it doesn't already exist 
         firsttime = False
         
         ''' Pull the data from the cloudlet, waterspout and ue databases '''
@@ -144,10 +140,11 @@ def main():
 
 def configure():
     global seg_client;global df_seg_client; global df_cloudlet_icmp_client
-    global df_waterspout_icmp_client;global df_ue_icmp_client
+    global df_waterspout_icmp_client;global df_ue_icmp_client;global df_offset_client
     global TZ; global CLOUDLET_IP; global EPC_IP;
-    global INFLUXDB_IP; global INFLUXDB_PORT
+    global INFLUXDB_IP; global INFLUXDB_PORT; global SEG_DB
     global LOGFILE; global LOGNAME; global LOGLEV
+    global legdict; global blacklist
 
     LOGNAME=__name__
     LOGLEV = logging.INFO
@@ -181,11 +178,20 @@ def configure():
     
     ''' Get all the clients '''
     seg_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
+
     df_seg_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     df_cloudlet_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=CLOUDLET_ICMP_DB)
     df_waterspout_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=WATERSPOUT_ICMP_DB)
     df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
     df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
+    
+    ''' For labeling segments '''
+    legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
+           7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
+    
+    ''' For bad sequences '''
+    blacklist = []
+    
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     return kwargs
@@ -264,8 +270,12 @@ def getLatencyData():
 
 def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset = True):
     TZ = 'America/New_York'
+    try:
+        offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
+    except:
+        mconsole("No offset data available -- returning 0",level="ERROR")
+        return 0
     
-    offset_df = to_ts_std(df_offset_client.query("select * from {}".format(measure))[measure],newtz='America/New_York')
     ''' Filter by ts boundaries '''
     tdfx = offset_df.copy()
     ''' convert from epoch to datetime '''
