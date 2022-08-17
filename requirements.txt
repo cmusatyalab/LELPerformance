@@ -1,2 +1,6 @@
 pyshark
 influxdb
+pandas
+numpy
+seaborn
+tqdm
