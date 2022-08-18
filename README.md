@@ -46,8 +46,17 @@ python3 query_measurements.py
 To store all values above, InfluxDB must be running on the Cloudlet. The Cloudlet is the location where all databases are stored. To run InfluxDB, run the following command on the Cloudlet:
 
 ```
-docker run -it -p 8086:8086 -v influxdb:/var/lib/influxdb influxdb:1.8
+docker run -it -p 8086:8086 -p 8088:8088 -v influxdb:/var/lib/influxdb influxdb:1.8
 ```
+
+However, if your cloudlet does not run continuously, you may want to run influxdb natively on the cloudlet to avoid loss of data.
+
+```
+sudo apt install influxdb
+sudo systemctl start influxdb
+sudo systemctl enable influxdb
+```
+
 
 ## Grafana Dashboard
 To enable the grafana dashboard, grafana must be running on the Cloudlet. To run Grafana, run the following command on the Cloudlet:
