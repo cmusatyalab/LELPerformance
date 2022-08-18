@@ -56,7 +56,7 @@ sudo apt install influxdb
 sudo systemctl start influxdb
 sudo systemctl enable influxdb
 ```
-
+There are two utilities for managing the databases, `cleanDBs.py` for selectively or completely deleting the data, and `backupDBs.py` which will create a backup of the full database and export the data as `.csv` files.
 
 ## Grafana Dashboard
 To enable the grafana dashboard, grafana must be running on the Cloudlet. To run Grafana, run the following command on the Cloudlet:
