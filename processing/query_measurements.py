@@ -251,7 +251,8 @@ def getLatencyData():
     for tup in dflst:
         tdfx = tup[0]
         tdfx['NAME'] = tup[1]
-        tdfy = tdfy.append(tdfx)
+        # tdfy = tdfy.append(tdfx)
+        tdfy = pd.concat([tdfy,tdfx])
     
     ''' Only keep sequences that are in all three dataframes '''
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
