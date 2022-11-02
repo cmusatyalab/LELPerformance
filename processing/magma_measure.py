@@ -22,6 +22,7 @@ from local_common import createDB,getDBs
 def main():
     global IP_ADDR
     global icmp_client
+    global kwargs
     
     configfn = "config.json"
     cnf = {}; ccnf = {};gcnf = {}
@@ -90,7 +91,8 @@ def log_packet(pkt):
     # print("LOG_PACKET-- {}".format(pkt))
     if "TCP" in pkt and not kwargs['tcpoff']:
 
-        # Skip the packet if not related to cloudlet
+        # Skip the packet if not related to magma
+        print(f"ipsrc={pkt.ip.src} ipdst={pkt.ip.dst}")
         if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
             return
         
@@ -140,7 +142,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        mconsole("Writing cloudlet ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
+        mconsole("Writing magma ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                                "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
