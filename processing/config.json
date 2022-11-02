@@ -26,6 +26,11 @@
 		"tcp_db":"uetcp",
 		"icmp_db":"ueicmp"
 		},
+	"MAGMA": {
+		"logfile":"magma_measure.log",
+		"tcp_db":"magmatcp",
+		"icmp_db":"magmaicmp"
+		},
 	"QUERY": {
 		"logfile":"query_measurments.log",
 		"seg_db":"segmentation",
