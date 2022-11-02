@@ -18,6 +18,7 @@ from pdpltutils import *
 import logging
 import simlogging
 from simlogging import mconsole
+from local_common import *
 
 if os.name == 'nt':
     OSNAME='WINDOWS'
@@ -30,7 +31,7 @@ LOGNAME=__name__
 LOGLEV = logging.INFO
 
 # Hardcode cloudlet IP and port for DB
-CLOUDLET_IP = '128.2.208.248'
+CLOUDLET_IP = '128.2.222.37'
 CLOUDLET_PORT = 8086
 NTPSERVER = "0.north-america.pool.ntp.org"
 NTPSERVER = "north-america.pool.ntp.org"
@@ -57,6 +58,7 @@ def main():
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
     offset_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DBNAME)
+    createDB(offset_client,DBNAME)
     mconsole("Starting offset measurements against {} with batchsize={} and {} seconds between batches" \
              .format(NTPSERVER,kwargs['batchsize'],kwargs['querytime']))
     while True:

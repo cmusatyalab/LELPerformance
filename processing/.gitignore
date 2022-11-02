@@ -5,3 +5,7 @@
 /LINUX_offset.log
 /database_clean.log
 /cloudlet_measure.log
+/waterspout_measure.log
+/database_cleanup.log
+/database_backup.log
+/db_backup.log

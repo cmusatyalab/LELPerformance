@@ -15,7 +15,7 @@ from optparse import OptionParser
 import simlogging
 from simlogging import mconsole
 ''' 
-    This program deletes the data in the various databases either en masse or measurement by measurement
+    This program backups the various databases as an influxdb portable backup and/or as individual csvs
 '''
 LOGNAME=__name__
 LOGLEV = logging.DEBUG
@@ -24,45 +24,39 @@ def main():
     global logger
     kwargs = configure()
     
+     # override
+    
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
-    (options,_) = cmdOptions()
-    kwargs = options.__dict__.copy()
-    mconsole("Warning: this program will delete information from your database.")
-    entry = input("Do you want to continue? [y/N] ") or "n"
+    if not os.path.exists(INFLUXDB_BACKUP_ROOT): 
+        os.makedirs(INFLUXDB_BACKUP_ROOT)
+    budir = os.path.join(INFLUXDB_BACKUP_ROOT,humandatenow())
+    os.makedirs(budir)
+    mconsole("Begin backups to {}".format(budir))
+    entry = input("Do you want to do an influxdb portable backup? [y/N] ") or "n"
+    if entry in ['Y','y']:       
+        cmd = "influxd backup -portable -host {}:{} {}" \
+            .format(INFLUXDB_IP,INFLUXDB_ADMINPORT,budir)
+        oscmd(cmd)
+    entry = input("Do you want to a csv file of each measurement? [y/N] ") or "n"
     if entry in ['Y','y']:
-        entry = input("VERY DANGEROUS: Do you want to delete all of the data? [y/N] ") or "n"
-        if entry in ['Y','y']:
-            mconsole("Deleting all of the data")
-            kwargs['DELETEALL'] = True
-        else:
-            mconsole("OK, walking you through each measurement")
-            kwargs['DELETEALL'] = False
         for db in measuredict.keys():
             dfclient = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=db)
             wtclient = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=db)
             for measure in measuredict[db]:
+                measuretag = "{}.{}".format(db,measure)
                 try:
                     tdfx = dfclient.query("select * from {}".format(measure))[measure]
                 except:
-                    mconsole("{}.{} has no measurements; continuing".format(db,measure))
+                    mconsole("{} has no measurements; continuing".format(measuretag))
                     continue
-                mconsole("{}.{} has {} measurements".format(db,measure,len(tdfx)))
-                mdel = kwargs['DELETEALL']
-                if not mdel:
-                    mconsole("NO RETURN: Do you want to drop all {} measurements from {}.{}".format(len(tdfx),db,measure))
-                    entry = input("[y/N] ") or "n"
-                    if entry in ['Y','y']: mdel = True
-                if mdel: deleteMeasure(db,measure,wtclient)
-
-def deleteMeasure(db,measure,wtclient):
-    mconsole("Dropping {}.{}".format(db,measure))
-    wtclient.drop_measurement(measure)
+                fn = "{}.csv".format(measuretag)
+                mconsole("Writing {} with {} measurements".format(fn,len(tdfx)))
+                writejoin(tdfx,budir,fn)
 
 def configure():
     global seg_client;global df_seg_client; global df_cloudlet_icmp_client
     global df_waterspout_icmp_client;global df_ue_icmp_client
-    global TZ; global CLOUDLET_IP; global EPC_IP;
-    global INFLUXDB_IP; global INFLUXDB_PORT; global measuredict
+    global INFLUXDB_IP; global INFLUXDB_PORT;global INFLUXDB_ADMINPORT; global INFLUXDB_BACKUP_ROOT; global measuredict
     global LOGFILE; global LOGNAME; global LOGLEV
 
     LOGNAME=__name__
@@ -79,18 +73,16 @@ def configure():
             ccnf = cnf['CLOUDLET']
             wcnf = cnf['WATERSPOUT']
     ''' General '''
-    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
-    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
-    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
-    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
     key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
+    key = "influxdb_adminport"; INFLUXDB_ADMINPORT = gcnf[key] if key in gcnf else 8088
+    key = "influxdb_backup_root"; INFLUXDB_BACKUP_ROOT = gcnf[key] if key in gcnf else "~/influxdb_backup"
+    INFLUXDB_BACKUP_ROOT = os.path.expanduser(INFLUXDB_BACKUP_ROOT)
     key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
-    key = "timezone"; TZ = gcnf[key] if key in gcnf else "America/New_York"
     key = "seg_db"; SEG_DB = gcnf[key] if key in gcnf else "segmentation"
     key = "offset_db"; OFFSET_DB = gcnf[key] if key in gcnf else "winoffset"
     
     ''' necessary node specific '''
-    LOGFILE= "database_cleanup.log"
+    LOGFILE = "database_backup.log"
     key = "icmp_db"; CLOUDLET_ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
     key = "icmp_db"; WATERSPOUT_ICMP_DB = wcnf[key] if key in wcnf else "cloudleticmp"
     key = "icmp_db"; UE_ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"

@@ -28,6 +28,12 @@ The interface names will be specific to the network used. They can be obtained w
 
 Note that adding ```not tcp and not sctp``` to the *tcpdump* command helps to filter out the overwhelming amount of  TCP and SCTP traffic that is spurious if you're only interested in ICMP ping data.
 
+To monitor from within the XRAN server itself, you'd need xran credentials. For our xran,
+
+```
+sshpass -p <XRANIP> ssh <XRANLOGIN>@<XRANIP> "sudo tcpdump -s 0 -U -w - -i any not port 22" | python xran_measure.py
+```
+
 ## Latency Segmentation Calculations
 We use the `query_measurements.py` script to calculate segment latency from extracted fields for each probe and upload them to a separate database. The commands to run this script are: 
 
@@ -40,8 +46,17 @@ python3 query_measurements.py
 To store all values above, InfluxDB must be running on the Cloudlet. The Cloudlet is the location where all databases are stored. To run InfluxDB, run the following command on the Cloudlet:
 
 ```
-docker run -it -p 8086:8086 -v influxdb:/var/lib/influxdb influxdb:1.8
+docker run -it -p 8086:8086 -p 8088:8088 -v influxdb:/var/lib/influxdb influxdb:1.8
 ```
+
+However, if your cloudlet does not run continuously, you may want to run influxdb natively on the cloudlet to avoid loss of data.
+
+```
+sudo apt install influxdb
+sudo systemctl start influxdb
+sudo systemctl enable influxdb
+```
+There are two utilities for managing the databases, `cleanDBs.py` for selectively or completely deleting the data, and `backupDBs.py` which will create a backup of the full database and export the data as `.csv` files.
 
 ## Grafana Dashboard
 To enable the grafana dashboard, grafana must be running on the Cloudlet. To run Grafana, run the following command on the Cloudlet:
