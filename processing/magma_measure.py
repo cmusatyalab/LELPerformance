@@ -25,19 +25,19 @@ def main():
     global kwargs
     
     configfn = "config.json"
-    cnf = {}; ccnf = {};gcnf = {}
+    cnf = {}; mcnf = {};gcnf = {}
     if configfn is not None and os.path.isfile(configfn):
         with open(configfn) as f:
             cnf = json.load(f)
-            ccnf = cnf['MAGMA']
+            mcnf = cnf['MAGMA']
             gcnf = cnf['GENERAL']
     LOGNAME=__name__
     LOGLEV = logging.INFO
     ''' Assure values for all parameters '''
     ''' Magma related '''
-    key = "logfile"; LOGFILE= ccnf[key] if key in ccnf else "magma_measure.log"
-    key = "tcp_db"; TCP_DB = ccnf[key] if key in ccnf else "magmatcp"
-    key = "icmp_db"; ICMP_DB = ccnf[key] if key in ccnf else "magmaicmp"
+    key = "logfile"; LOGFILE= mcnf[key] if key in mcnf else "magma_measure.log"
+    key = "tcp_db"; TCP_DB = mcnf[key] if key in mcnf else "magmatcp"
+    key = "icmp_db"; ICMP_DB = mcnf[key] if key in mcnf else "magmaicmp"
 
     
     ''' General '''
