@@ -9,6 +9,7 @@ from ipaddress import ip_address
 sys.path.append("../lib")
 
 from pyshark.capture.pipe_capture import PipeCapture
+from pyshark.capture.file_capture import FileCapture
 
 # InfluxDB related initialization
 from influxdb import InfluxDBClient
@@ -20,45 +21,49 @@ from simlogging import mconsole, logging
 from local_common import createDB,getDBs
 
 def main():
-    global IP_ADDR
-    global icmp_client
-    global kwargs
-    
+    # global kwargs
+    global cnf
+    global logger
+    global systemname
+
+    ''' Configuration '''
     configfn = "config.json"
-    cnf = {}; mcnf = {};gcnf = {}
+    cnf = {}
     if configfn is not None and os.path.isfile(configfn):
         with open(configfn) as f:
-            cnf = json.load(f)
-            mcnf = cnf['MAGMA']
-            gcnf = cnf['GENERAL']
+            cnf = json.load(f)  
+    (options,_) = cmdOptions()
+    kwargs = options.__dict__.copy()
+    cnf.update(kwargs)
+    systemnamekey = cnf['SYSTEM']
+    systemname = systemnamekey.lower()
+    cnf.update(cnf['GENERAL'])
+    cnf.update(cnf[systemnamekey])
+    
+    ''' Logging '''
     LOGNAME=__name__
     LOGLEV = logging.INFO
-    ''' Assure values for all parameters '''
-    ''' Magma related '''
-    key = "logfile"; LOGFILE= mcnf[key] if key in mcnf else "magma_measure.log"
-    key = "tcp_db"; TCP_DB = mcnf[key] if key in mcnf else "magmatcp"
-    key = "icmp_db"; ICMP_DB = mcnf[key] if key in mcnf else "magmaicmp"
 
+    key = "logfile"; LOGFILE= cnf[key] if key in cnf else f"{systemname}_measure.log"
+    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)   
+    retcode = job_execute(**cnf)
+    
+def job_execute(**cnf):
+    global IP_ADDR
+    global icmp_client
+    ''' Assure values for all parameters '''
+    # systemname = cnf['SYSTEM'].lower()
+    ''' System specific related '''
+    key = "tcp_db"; TCP_DB = cnf[key] if key in cnf else f"{systemname}tcp"
+    key = "icmp_db"; ICMP_DB = cnf[key] if key in cnf else f"{systemname}icmp"
     
     ''' General '''
-    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
-    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
-    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
-    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
-    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
-    key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
-    
-    logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
-    
-    parser = OptionParser(usage="usage: %prog [options]")
-    parser.add_option("-O", "--tcpoff",
-        action="store_true", dest="tcpoff", default=False,
-        help="Turn off tcp capture")
-    parser.add_option("-F", "--filename", dest="filename",
-        help="take input from pcap file instead of stdin", metavar="FILE")
-    
-    (options,args) = parser.parse_args()
-    kwargs = options.__dict__.copy()
+    key = "epc_ip"; EPC_IP = cnf[key] if key in cnf else "192.168.25.4"
+    key = "lelgw_ip"; LELGW_IP = cnf[key] if key in cnf else "128.2.212.53"
+    key = "cloudlet_ip" ; CLOUDLET_IP = cnf[key] if key in cnf else "128.2.208.248"
+    key = "ue_ip"; UE_IP = cnf[key] if key in cnf else "172.26.21.132"
+    key = "influxdb_port"; INFLUXDB_PORT = cnf[key] if key in cnf else 8086
+    key = "influxdb_ip"; INFLUXDB_IP = cnf[key] if key in cnf else CLOUDLET_IP
     
     ''' Initialize clients to access Cloudlet TCP and ICMP databases '''
     mconsole("Connecting to influxdb on cloudlet {}:{}".format(INFLUXDB_IP,INFLUXDB_PORT))
@@ -69,14 +74,36 @@ def main():
     icmp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=ICMP_DB)
     if createDB(icmp_client, ICMP_DB):
         icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
+       
+    # Acceptable IP addresses to track at system
+    # IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
+    SG1_IP = "192.168.122.47"
+    S1_IP = "192.168.25.116"
+    ENB_IP = "192.168.25.13"
+    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,SG1_IP,S1_IP,ENB_IP]
     
-    # Receive input from STDIN (piped on terminal)        
-    pipecap = PipeCapture(pipe=sys.stdin, debug=True) # Get from stdin
-    
-    # Acceptable IP addresses to track at cloudlet
-    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
-    
+    if ('filename' in cnf and cnf['filename'] is not None and os.path.isfile(cnf['filename'])):
+        pipecap = FileCapture(cnf['filename'], debug=True)
+    else:
+        # Receive input from STDIN (piped on terminal)        
+        pipecap = PipeCapture(pipe=sys.stdin, debug=True) # Get from stdin
+ 
     pipecap.apply_on_packets(log_packet)
+    
+def cmdOptions():
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-d", "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="Debugging mode")
+    parser.add_option("-O", "--tcpoff",
+        action="store_true", dest="tcpoff", default=False,
+        help="Turn off tcp capture")
+    parser.add_option("-F", "--filename", dest="filename",
+        help="take input from pcap file instead of stdin", metavar="FILE")
+    parser.add_option("-S", "--system", dest="SYSTEM", default="MAGMA",
+        help="System to run on SYSTEM (MAGMA, CLOUDLET,UE)", metavar="SYSTEM")
+    
+    return  parser.parse_args()
 
 def log_packet(pkt):
     def timeconv(sstr):
@@ -89,10 +116,10 @@ def log_packet(pkt):
     TCP or ICMP database
     """
     # print("LOG_PACKET-- {}".format(pkt))
-    if "TCP" in pkt and not kwargs['tcpoff']:
+    if "TCP" in pkt and not cnf['tcpoff']:
 
         # Skip the packet if not related to magma
-        print(f"ipsrc={pkt.ip.src} ipdst={pkt.ip.dst}")
+        # print(f"ipsrc={pkt.ip.src} ipdst={pkt.ip.dst}")
         if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
             return
         
@@ -115,21 +142,21 @@ def log_packet(pkt):
         tcp_client.write_points(packets)
         
     elif "ICMP" in pkt:
-        print("0: CMP SRC IP: {} DST IP: {} -- IP_ADDR: {}".format(pkt.ip.src,pkt.ip.dst,IP_ADDR))
+        mconsole(f"0: CMP SRC IP: {pkt.ip.src} DST IP: {pkt.ip.dst} -- IP_ADDR: {IP_ADDR}", level="DEBUG")
         if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
             return
-        print("1: CMP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst))
+        mconsole(f"1: CMP SRC IP: {pkt.ip.src} DST IP: {pkt.ip.dst}", level="DEBUG")
         
         try:
             icmp_timestamp = str(pkt.icmp.data_time)
-            mconsole("Has data_time: {} frame_info.time: {} {} {}" \
-                  .format(icmp_timestamp,pkt.frame_info.time,pkt.ip.src,pkt.ip.dst), level="DEBUG")
+            mconsole(f"Has data_time: {icmp_timestamp} frame_info.time: {pkt.frame_info.time} {pkt.ip.src} {pkt.ip.dst}", \
+                  level="DEBUG")
         except:
             icmp_timestamp = "0"
 
         try:
             icmp_id = int(pkt.icmp.seq_le)
-            icmp_seq = "{}/{}".format(str(pkt.icmp.seq),str(pkt.icmp.seq_le))
+            icmp_seq = f"{pkt.icmp.seq}/{pkt.icmp.seq_le}"
         except:
             return
         
@@ -142,7 +169,7 @@ def log_packet(pkt):
             icmp_humantime = str(pkt.frame_info.time)
         except:
             return
-        mconsole("Writing magma ICMP measurement -- SRC IP: {} DST IP: {} SEQUENCE: {}".format(pkt.ip.src,pkt.ip.dst,icmp_id))       
+        mconsole(f"Writing {systemname} ICMP meas -- SRC: {pkt.ip.src} DST: {pkt.ip.dst} SEQ: {icmp_seq} {icmp_humantime}")       
         pkt_entry = {"measurement":"latency", "tags":{"dst":pkt.ip.dst, "src":pkt.ip.src}, 
                      "fields":{"data_time": icmp_timestamp, "epoch": epoch, 
                                "identifier": icmp_id, "sequence": icmp_seq, "htime": icmp_humantime}}
@@ -152,6 +179,9 @@ def log_packet(pkt):
 
         # Write to ICMP database
         icmp_client.write_points(packets)
+        
+    else:
+        pass
 
         
         

@@ -1,9 +1,9 @@
 {
 	"GENERAL": {
 		"lelgw_ip":"128.2.212.53",
-		"epc_ip":"192.168.25.4",
-		"cloudlet_ip":"172.31.0.10",
-		"influxdb_ip":"128.2.222.37",
+		"epc_ip":"128.2.211.195",
+		"cloudlet_ip":"128.2.208.222",
+		"influxdb_ip":"128.2.211.195",
 		"influxdb_port":"8086",
 		"influxdb_adminport":"8088",
 		"influxdb_backup_root":"~/influxdb_backup",
@@ -27,6 +27,7 @@
 		"icmp_db":"ueicmp"
 		},
 	"MAGMA": {
+		"epc_ip":"128.2.211.195",
 		"logfile":"magma_measure.log",
 		"tcp_db":"magmatcp",
 		"icmp_db":"magmaicmp"
