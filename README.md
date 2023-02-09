@@ -22,6 +22,12 @@ sudo tcpdump -s 0 -U -w - -i enp179s0f1 | python3 cloudlet_measure.py
 sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
+
+sudo tcpdump -s 0 -U -w - -i any | python3 magma_measure.py
+
+sudo tshark -s 0 -U -w - -i virtbr0 -i vlan25 | python3 magma_measure.py
+
+
 ```
 
 The interface names will be specific to the network used. They can be obtained with the `ip a` command on linux systems. We used a Multitech USB dongle to connect the laptop to our CBRS network. Configuring that dongle on Linux required adding it to the `netplan` configuration. (See the dongle.cfg file for more details.)
