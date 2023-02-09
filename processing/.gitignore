@@ -9,3 +9,12 @@
 /database_cleanup.log
 /database_backup.log
 /db_backup.log
+/magma_measure.log
+/ping_any.pcap
+/ping_any_eno1.pcap
+/ping_any_eno2.pcap
+/ping_any_macvtap1.pcap
+/ping_any_virbr0.pcap
+/ping_any_vlan25.pcap
+/ping_any_vnet0.pcap
+/tshark.pcap

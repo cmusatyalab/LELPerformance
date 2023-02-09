@@ -20,6 +20,8 @@ from simlogging import mconsole, logging
 
 from local_common import createDB,getDBs
 
+DEFAULTS = {}
+
 def main():
     # global kwargs
     global cnf
@@ -51,22 +53,26 @@ def main():
 def job_execute(**cnf):
     global IP_ADDR
     global icmp_client
+    
     ''' Assure values for all parameters '''
-    # systemname = cnf['SYSTEM'].lower()
+
     ''' System specific related '''
     key = "tcp_db"; TCP_DB = cnf[key] if key in cnf else f"{systemname}tcp"
     key = "icmp_db"; ICMP_DB = cnf[key] if key in cnf else f"{systemname}icmp"
     
     ''' General '''
-    key = "epc_ip"; EPC_IP = cnf[key] if key in cnf else "192.168.25.4"
-    key = "lelgw_ip"; LELGW_IP = cnf[key] if key in cnf else "128.2.212.53"
-    key = "cloudlet_ip" ; CLOUDLET_IP = cnf[key] if key in cnf else "128.2.208.248"
-    key = "ue_ip"; UE_IP = cnf[key] if key in cnf else "172.26.21.132"
-    key = "influxdb_port"; INFLUXDB_PORT = cnf[key] if key in cnf else 8086
-    key = "influxdb_ip"; INFLUXDB_IP = cnf[key] if key in cnf else CLOUDLET_IP
+    key = "epc_ip";         EPC_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "s1_ip";          S1_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "sg1_ip";         SG1_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "enb_ip";         ENB_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "lelgw_ip";       LELGW_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "cloudlet_ip" ;   CLOUDLET_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "ue_ip";          UE_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "influxdb_port";  INFLUXDB_PORT = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "influxdb_ip";    INFLUXDB_IP = cnf[key] if key in cnf else DEFAULTS[key]
     
     ''' Initialize clients to access Cloudlet TCP and ICMP databases '''
-    mconsole("Connecting to influxdb on cloudlet {}:{}".format(INFLUXDB_IP,INFLUXDB_PORT))
+    mconsole(f"Connecting to influxdb on cloudlet {INFLUXDB_IP}:{INFLUXDB_PORT}")
     tcp_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=TCP_DB)
     if createDB(tcp_client, TCP_DB):   
         tcp_client.alter_retention_policy("autogen", database=TCP_DB, duration="30d", default=True)
@@ -76,16 +82,13 @@ def job_execute(**cnf):
         icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
        
     # Acceptable IP addresses to track at system
-    # IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,EPC_IP]
-    SG1_IP = "192.168.122.47"
-    S1_IP = "192.168.25.116"
-    ENB_IP = "192.168.25.13"
     IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,SG1_IP,S1_IP,ENB_IP]
     
     if ('filename' in cnf and cnf['filename'] is not None and os.path.isfile(cnf['filename'])):
+        ''' Receive input from pcap file '''
         pipecap = FileCapture(cnf['filename'], debug=True)
     else:
-        # Receive input from STDIN (piped on terminal)        
+        ''' Receive input from STDIN (piped on terminal) '''        
         pipecap = PipeCapture(pipe=sys.stdin, debug=True) # Get from stdin
  
     pipecap.apply_on_packets(log_packet)
@@ -183,7 +186,21 @@ def log_packet(pkt):
     else:
         pass
 
-        
+    
+    DEFAULTS =    {    
+        "lelgw_ip":"128.2.212.53",
+        "epc_ip":"128.2.211.195",
+        "cloudlet_ip":"128.2.208.222",
+        "influxdb_ip":"128.2.211.195",
+        "influxdb_port":"8086",
+        "enb_ip":"192.168.25.13",
+        "s1_ip":"192.168.25.116",
+        "sg1_ip":"192.168.122.47",
+        "influxdb_adminport":"8088",
+        "influxdb_backup_root":"~/influxdb_backup",
+        "timezone":"America/New_York" ,
+        "ue_ip":"192.168.128.13",
+    } 
         
 
 if __name__ == '__main__': main()

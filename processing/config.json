@@ -5,7 +5,11 @@
 		"cloudlet_ip":"128.2.208.222",
 		"influxdb_ip":"128.2.211.195",
 		"influxdb_port":"8086",
+		"enb_ip":"192.168.25.13",
+		"s1_ip":"192.168.25.116",
+		"sg1_ip":"192.168.122.47",
 		"influxdb_adminport":"8088",
+		"ue_ip":"192.168.128.13",
 		"influxdb_backup_root":"~/influxdb_backup",
 		"timezone":"America/New_York"
 	},
