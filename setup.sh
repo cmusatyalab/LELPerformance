@@ -5,4 +5,4 @@ sudo update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
 pip install -r requirements.txt
 
-sudo apt install wireshark-qt
+sudo apt install wireshark-qt tshark
