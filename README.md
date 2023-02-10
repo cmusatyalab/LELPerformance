@@ -25,7 +25,11 @@ sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 
 sudo tcpdump -s 0 -U -w - -i any | python3 magma_measure.py
 
-sudo tshark -s 0 -U -w - -i virtbr0 -i vlan25 | python3 magma_measure.py
+sudo tshark -s 0 -U -w - -i virtbr0 -i vlan25 | python3 magma_measure.py -O -S MAGMA
+
+sudo tcpdump -s 0 -U -w - -i eno2 not port 22 | python magma_measure.py -O -S CLOUDLET
+
+sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 magma_measure.py -O -S UE
 
 
 ```
