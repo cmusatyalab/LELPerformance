@@ -7,9 +7,11 @@
 		"influxdb_port":"8086",
 		"enb_ip":"192.168.25.13",
 		"s1_ip":"192.168.25.116",
+		"s1_interface":"eth1",
 		"sg1_ip":"192.168.122.47",
+		"sg1_interface":"eth0",
 		"influxdb_adminport":"8088",
-		"ue_ip":"192.168.128.13",
+		"ue_ip":"192.168.128.17",
 		"influxdb_backup_root":"~/influxdb_backup",
 		"timezone":"America/New_York"
 	},
@@ -28,8 +30,9 @@
 	"UE": {
 		"logfile":"laptop_measure.log",
 		"tcp_db":"uetcp",
-		"icmp_db":"ueicmp"
-		},
+		"icmp_db":"ueicmp",
+		"ue_interface":"enx0016083656d3"
+	},
 	"MAGMA": {
 		"epc_ip":"128.2.211.195",
 		"logfile":"magma_measure.log",

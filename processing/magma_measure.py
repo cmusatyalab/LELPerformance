@@ -6,6 +6,8 @@ import os
 import datetime
 import json
 from ipaddress import ip_address
+import netifaces as ni
+
 sys.path.append("../lib")
 
 from pyshark.capture.pipe_capture import PipeCapture
@@ -67,7 +69,7 @@ def job_execute(**cnf):
     key = "enb_ip";         ENB_IP = cnf[key] if key in cnf else DEFAULTS[key]
     key = "lelgw_ip";       LELGW_IP = cnf[key] if key in cnf else DEFAULTS[key]
     key = "cloudlet_ip" ;   CLOUDLET_IP = cnf[key] if key in cnf else DEFAULTS[key]
-    key = "ue_ip";          UE_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "ue_ip";          UE_IP = cnf[key] if key in cnf else getUEIP();
     key = "influxdb_port";  INFLUXDB_PORT = cnf[key] if key in cnf else DEFAULTS[key]
     key = "influxdb_ip";    INFLUXDB_IP = cnf[key] if key in cnf else DEFAULTS[key]
     
@@ -120,12 +122,10 @@ def log_packet(pkt):
     """
     # print("LOG_PACKET-- {}".format(pkt))
     if "TCP" in pkt and not cnf['tcpoff']:
-
         # Skip the packet if not related to magma
-        # print(f"ipsrc={pkt.ip.src} ipdst={pkt.ip.dst}")
         if (pkt.ip.src not in IP_ADDR) or (pkt.ip.dst not in IP_ADDR):
             return
-        
+
         # print("TCP SRC IP: {} DST IP: {}".format(pkt.ip.src,pkt.ip.dst)) 
         try:
             tcp_timestamp = pkt.tcp.options_timestamp_tsval
@@ -186,21 +186,35 @@ def log_packet(pkt):
     else:
         pass
 
+
+''' Application Utilities '''
     
-    DEFAULTS =    {    
-        "lelgw_ip":"128.2.212.53",
-        "epc_ip":"128.2.211.195",
-        "cloudlet_ip":"128.2.208.222",
-        "influxdb_ip":"128.2.211.195",
-        "influxdb_port":"8086",
-        "enb_ip":"192.168.25.13",
-        "s1_ip":"192.168.25.116",
-        "sg1_ip":"192.168.122.47",
-        "influxdb_adminport":"8088",
-        "influxdb_backup_root":"~/influxdb_backup",
-        "timezone":"America/New_York" ,
-        "ue_ip":"192.168.128.13",
-    } 
+def getUEIP():
+    ip = ni.ifaddresses(cnf['ue_interface'])[ni.AF_INET][0]['addr']
+    return ip
+
+def getLTEIP():
+    if cnf['SYSTEM']!= "MAGMA": 
+        mconsole(f"This is not the magma system; IP addresses invalid {cnf['SYSTEM']}",level="ERROR")
+        return None,None
+    s1_ip = ni.ifaddresses(cnf['s1_interface'])[ni.AF_INET][0]['addr']
+    sg1_ip = ni.ifaddresses(cnf['sg1_interface'])[ni.AF_INET][0]['addr']
+    return s1_ip,sg1_ip
+    
+DEFAULTS =    {    
+    "lelgw_ip":"128.2.212.53",
+    "epc_ip":"128.2.211.195",
+    "cloudlet_ip":"128.2.208.222",
+    "influxdb_ip":"128.2.211.195",
+    "influxdb_port":"8086",
+    "enb_ip":"192.168.25.13",
+    "s1_ip":"192.168.25.116",
+    "sg1_ip":"192.168.122.47",
+    "influxdb_adminport":"8088",
+    "influxdb_backup_root":"~/influxdb_backup",
+    "timezone":"America/New_York" ,
+    "ue_ip":"192.168.128.13",
+} 
         
 
 if __name__ == '__main__': main()
