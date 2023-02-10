@@ -23,7 +23,7 @@ sudo tcpdump -s 0 -U -w - -i eno1 | python3 waterspout_measure.py
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 laptop_measure.py
 
-sudo tcpdump -s 0 -U -w - -i any | python3 magma_measure.py
+sudo tcpdump -s 0 -U -w - -i any | python3 magma_measure.py -O -S MAGMA
 
 sudo tshark -s 0 -U -w - -i virtbr0 -i vlan25 | python3 magma_measure.py -O -S MAGMA
 
