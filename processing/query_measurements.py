@@ -22,7 +22,7 @@ from local_common import *
 
 
 ''' 
-    This program collects latency measurements from the UE, waterspout and cloudlet influxdb databases,
+    This program collects latency measurements from the UE, magma and cloudlet influxdb databases,
     aggregates them and writes them back into the segmentation database for later analysis and dashboard dataset
 '''
 
@@ -46,7 +46,7 @@ def main():
         else: createDB(seg_client,SEG_DB) # Only creates if it doesn't already exist 
         firsttime = False
         
-        ''' Pull the data from the cloudlet, waterspout and ue databases '''
+        ''' Pull the data from the cloudlet, magma and ue databases '''
         try:
             latencydf = getLatencyData()
         except Exception as e:
@@ -138,9 +138,50 @@ def main():
                  .format(len(tdfx),list(set(tdfx.sequence))))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
 
+def getLatencyData():            
+    ''' Query the different network nodes' data '''
+    measure = 'latency'
+    cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))[measure]
+    magma_icmp_df = df_magma_icmp_client.query("select * from {}".format(measure))[measure]
+    ''' Eliminate duplicate magma packets -- fix for XRAN double reporting with different epochs '''
+    magma_icmp_df = magma_icmp_df.groupby(by=['sequence','src','dst']).agg({'epoch':'min'}) \
+                .sort_values('epoch').reset_index()
+    
+    ue_icmp_df = df_ue_icmp_client.query("select * from {}".format(measure))[measure]
+    
+    ''' Get list of sequences in all three dataframes '''
+    seqminset = list(set(ue_icmp_df.sequence) \
+        .intersection((set(cloudlet_icmp_df.sequence) \
+        .intersection(set(magma_icmp_df.sequence)))))
+    
+    ''' Combine the nodes '''
+    dflst = [(cloudlet_icmp_df,'cloudlet'),(magma_icmp_df,'magma'),(ue_icmp_df,'ue')]
+    tdfy = pd.DataFrame()
+    for tup in dflst:
+        tdfx = tup[0]
+        tdfx['NAME'] = tup[1]
+        # tdfy = tdfy.append(tdfx)
+        tdfy = pd.concat([tdfy,tdfx])
+    writejoin(tdfy,".","tdfx.csv")    
+    ''' Only keep sequences that are in all three dataframes '''
+    tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+    
+    ''' Only keep sequences that are not on blacklist '''
+    tdfy = checkAgainstBlacklist(tdfy)
+    
+    ''' Label the segments in what remains '''
+    
+    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
+
+    tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
+    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
+    
+    return tdfy
+
 def configure():
     global seg_client;global df_seg_client; global df_cloudlet_icmp_client
-    global df_waterspout_icmp_client;global df_ue_icmp_client;global df_offset_client
+    global df_magma_icmp_client;global df_ue_icmp_client;global df_offset_client
     global TZ; global CLOUDLET_IP; global EPC_IP;
     global INFLUXDB_IP; global INFLUXDB_PORT; global SEG_DB
     global LOGFILE; global LOGNAME; global LOGLEV
@@ -158,30 +199,32 @@ def configure():
             gcnf = cnf['GENERAL']
             ucnf = cnf['UE']
             ccnf = cnf['CLOUDLET']
-            wcnf = cnf['WATERSPOUT']
+            mcnf = cnf['MAGMA']
     ''' General '''
-    key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
-    key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
-    key = "cloudlet_ip" ; CLOUDLET_IP = gcnf[key] if key in gcnf else "128.2.208.248"
-    key = "ue_ip"; UE_IP = gcnf[key] if key in gcnf else "172.26.21.132"
-    key = "influxdb_port"; INFLUXDB_PORT = gcnf[key] if key in gcnf else 8086
-    key = "influxdb_ip"; INFLUXDB_IP = gcnf[key] if key in gcnf else CLOUDLET_IP
-    key = "timezone"; TZ = gcnf[key] if key in gcnf else "America/New_York"
-    key = "seg_db"; SEG_DB = gcnf[key] if key in gcnf else "segmentation"
-    key = "offset_db"; OFFSET_DB = gcnf[key] if key in gcnf else "winoffset"
+    key = "epc_ip";         EPC_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "s1_ip";          S1_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "sg1_ip";         SG1_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "enb_ip";         ENB_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "lelgw_ip";       LELGW_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "cloudlet_ip" ;   CLOUDLET_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "ue_ip";          UE_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "influxdb_port";  INFLUXDB_PORT = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "influxdb_ip";    INFLUXDB_IP = cnf[key] if key in cnf else DEFAULTS[key]
+    key = "timezone";       TZ = gcnf[key] if key in gcnf else DEFAULTS[key]
+    key = "seg_db";         SEG_DB = gcnf[key] if key in gcnf else DEFAULTS[key]
+    key = "offset_db";      OFFSET_DB = gcnf[key] if key in gcnf else DEFAULTS[key]
     
     ''' necessary node specific '''
-    key = "logfile"; LOGFILE= qcnf[key] if key in qcnf else "query_measurments.log"
-    key = "icmp_db"; CLOUDLET_ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
-    key = "icmp_db"; WATERSPOUT_ICMP_DB = wcnf[key] if key in wcnf else "cloudleticmp"
-    key = "icmp_db"; UE_ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"
+    key = "logfile";        LOGFILE= qcnf[key] if key in qcnf else "query_measurments.log"
+    key = "icmp_db";        CLOUDLET_ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
+    key = "icmp_db";        MAGMA_ICMP_DB = mcnf[key] if key in mcnf else "magmaicmp"
+    key = "icmp_db";        UE_ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"
     
     ''' Get all the clients '''
     seg_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
-
     df_seg_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     df_cloudlet_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=CLOUDLET_ICMP_DB)
-    df_waterspout_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=WATERSPOUT_ICMP_DB)
+    df_magma_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=MAGMA_ICMP_DB)
     df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
     df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
     
@@ -229,46 +272,6 @@ def checkAgainstBlacklist(indf):
     retdf = indf[~indf.sequence.isin(blacklist)]
     return retdf
 
-def getLatencyData():            
-    ''' Query the different network nodes' data '''
-    measure = 'latency'
-    cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))[measure]
-    waterspout_icmp_df = df_waterspout_icmp_client.query("select * from {}".format(measure))[measure]
-    ''' Eliminate duplicate waterspout packets -- fix for XRAN double reporting with different epochs '''
-    waterspout_icmp_df = waterspout_icmp_df.groupby(by=['sequence','src','dst']).agg({'epoch':'min'}) \
-                .sort_values('epoch').reset_index()
-    
-    ue_icmp_df = df_ue_icmp_client.query("select * from {}".format(measure))[measure]
-    
-    ''' Get list of sequences in all three dataframes '''
-    seqminset = list(set(ue_icmp_df.sequence) \
-        .intersection((set(cloudlet_icmp_df.sequence) \
-        .intersection(set(waterspout_icmp_df.sequence)))))
-    
-    ''' Combine the nodes '''
-    dflst = [(cloudlet_icmp_df,'cloudlet'),(waterspout_icmp_df,'waterspout'),(ue_icmp_df,'ue')]
-    tdfy = pd.DataFrame()
-    for tup in dflst:
-        tdfx = tup[0]
-        tdfx['NAME'] = tup[1]
-        # tdfy = tdfy.append(tdfx)
-        tdfy = pd.concat([tdfy,tdfx])
-    
-    ''' Only keep sequences that are in all three dataframes '''
-    tdfy = tdfy[tdfy.sequence.isin(seqminset)]
-    
-    ''' Only keep sequences that are not on blacklist '''
-    tdfy = checkAgainstBlacklist(tdfy)
-    
-    ''' Label the segments in what remains '''
-    
-    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
-    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
-    tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
-    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
-    
-    return tdfy
-
 def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset = True):
     TZ = 'America/New_York'
     try:
@@ -310,12 +313,16 @@ def lookupLeg(row):
     if ddir == 'uplink':
         if name == 'ue': step = 0
         elif name == 'cloudlet': step = 3
-        elif name == 'waterspout': step = 1 if dst == EPC_IP else 2                
+        elif name == 'magma': step = 1 if dst == EPC_IP else 2                
     elif ddir == 'downlink':
         if name == 'ue': step = 7
         elif name == 'cloudlet': step = 4
-        elif name == 'waterspout': step = 5 if dst == EPC_IP else 6
-    legname = legdict[step]
+        elif name == 'magma': step = 5 if dst == EPC_IP else 6
+    try:
+        legname = legdict[step]
+    except:
+        legname = "unknown"
+        
     return (ddir,step,legname)
 
 ''' Write into influxdb '''
@@ -333,4 +340,20 @@ def writePkt(row, client):
     # except:
     #     mconsole("Bad measurement: {}".format(row),level="ERROR")
 
+DEFAULTS =    {    
+    "lelgw_ip":"128.2.212.53",
+    "epc_ip":"128.2.211.195",
+    "cloudlet_ip":"128.2.208.222",
+    "influxdb_ip":"128.2.211.195",
+    "influxdb_port":"8086",
+    "enb_ip":"192.168.25.13",
+    "s1_ip":"192.168.25.116",
+    "sg1_ip":"192.168.122.47",
+    "influxdb_adminport":"8088",
+    "influxdb_backup_root":"~/influxdb_backup",
+    "timezone":"America/New_York" ,
+    "ue_ip":"192.168.128.13",
+    "seg_db":"segmentation",
+    "offset_db":"winoffset"
+}
 if __name__ == '__main__': main()
