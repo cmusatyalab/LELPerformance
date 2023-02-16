@@ -86,6 +86,7 @@ def main():
         
         ''' Calculate difference between each step ; save the epoch from the UE uplink as the start of the sequence '''
         tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
+        tdfz['LASTEPOCH'] = tdfz.epoch.shift(1)
         tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
         
         ''' Calculate the round trip time (RTT) two different ways '''
@@ -99,7 +100,7 @@ def main():
 
         ''' Convert the DF for storage in the segmentation database '''
         indlst = ['sequence','direction','RTT','STEPSUM']
-        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT']
+        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT','LASTEPOCH']
         tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
                         .reset_index(drop=True).drop_duplicates()
 
@@ -137,6 +138,8 @@ def main():
         mconsole("Writing {} measurements to the segmentation database  (Sequence Nos: {})" \
                  .format(len(tdfx),list(set(tdfx.sequence))))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
+
+
 
 def getLatencyData():            
     ''' Query the different network nodes' data '''
