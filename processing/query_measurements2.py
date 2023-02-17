@@ -5,6 +5,7 @@ import sys
 sys.path.append("../lib")
 import os
 import json
+import traceback
 from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
@@ -29,8 +30,7 @@ from local_common import *
 def main():
     ''' INITIALIZATION '''
     global blacklist
-    global leghashmap
-
+    blacklist = []
     kwargs = configure()
     ''' Logging '''
     loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
@@ -51,10 +51,12 @@ def main():
         
         ''' Pull the data from the cloudlet, magma and ue databases '''
         try:
-            latencydf = getLatencyData()
+            latencydf,newblacklist = getLatencyData()
+            blacklist += newblacklist
         except Exception as e:
             mconsole("Did not get any latency data: {}".format(e),level = "ERROR")
             continue
+        
         preseq = list(set(latencydf.sequence))
         
         tdfz = cleanLatencyData(latencydf)
@@ -138,6 +140,8 @@ def getLatencyData():
     tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
     
     ''' Only keep sequences that are in all three dataframes '''
+    newblacklist = list(set(tdfy.sequence[~tdfy.sequence.isin(seqminset)]))
+    
     tdfy = tdfy[tdfy.sequence.isin(seqminset)]
     ''' Only keep sequences that are not on blacklist '''
     tdfy = checkAgainstBlacklist(tdfy)
@@ -154,11 +158,11 @@ def getLatencyData():
     
     tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
 
-    return tdfy
+    return tdfy,newblacklist
 
 def cleanLatencyData(fdf):
     ''' Is it already in the segmentation database? '''
-    fdf = checkAgainstCurrent(fdf)
+    fdf,newblacklist = checkAgainstCurrent(fdf)
     if noMeasurements(fdf,tag="no new"): return None
     fullseqlst = list(set(fdf.sequence))
     mconsole(f"Retrieved {len(fullseqlst)} possible sequences (Sequence Nos: {fullseqlst})" \
@@ -189,7 +193,7 @@ def configure():
     global TZ; 
     global INFLUXDB_IP; global INFLUXDB_PORT; global SEG_DB
     global LOGFILE; global LOGNAME; global LOGLEV
-    global legdict; global blacklist; global leghashmap
+    global legdict; global leghashmap
     global S1_IP; global SG1_IP; global CLOUDLET_IP; global EPC_IP; global UE_IP; global LEGW_IP; global ENB_IP
 
     LOGNAME=__name__
@@ -234,10 +238,6 @@ def configure():
     df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
     df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
     
-
-    
-    ''' For bad sequences '''
-    blacklist = []
     leghashmap = makeLegHashDict()
     legdict = {'0':'start', '1': 'ue_xran','2':'xran_epc','3':'epc_cloudlet',
            '7': 'xran_ue','6':'epc_xran','5':'epc_cloudlet','4':'cloudlet_epc'}
@@ -266,14 +266,13 @@ def noMeasurements(fdf,tag='no info'):
 
 def checkAgainstCurrent(newdf):
     ''' Is the sequence already in the database '''
-    
-    measure = 'uplink'
+    measure = 'segments'
     try:
-        seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
+        seg_df = df_seg_client.query("select * from {}".format(measure))[measure]
     except:
         return newdf
-    seqlst = list(set(seg_ul_df.sequence))
-    return newdf[~newdf.sequence.isin(seqlst)]
+    seqlst = list(set(seg_df.sequence))
+    return newdf[~newdf.sequence.isin(seqlst)],seqlst
 
 def checkAgainstBlacklist(indf):
     retdf = indf[~indf.sequence.isin(blacklist)]
@@ -310,6 +309,7 @@ def lookupLeg(row):
     name = row.NAME
     ddir = np.nan
     step = np.nan
+    legname = "unknown"
     
     try:
         ddir,step,legname = leghashmap[makeHashString(name,src,dst)]
