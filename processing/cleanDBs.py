@@ -60,7 +60,7 @@ def deleteMeasure(db,measure,wtclient):
 
 def configure():
     global seg_client;global df_seg_client; global df_cloudlet_icmp_client
-    global df_waterspout_icmp_client;global df_ue_icmp_client
+    global df_magma_icmp_client;global df_ue_icmp_client
     global TZ; global CLOUDLET_IP; global EPC_IP;
     global INFLUXDB_IP; global INFLUXDB_PORT; global measuredict
     global LOGFILE; global LOGNAME; global LOGLEV
@@ -77,7 +77,7 @@ def configure():
             gcnf = cnf['GENERAL']
             ucnf = cnf['UE']
             ccnf = cnf['CLOUDLET']
-            wcnf = cnf['WATERSPOUT']
+            wcnf = cnf['MAGMA']
     ''' General '''
     key = "epc_ip"; EPC_IP = gcnf[key] if key in gcnf else "192.168.25.4"
     key = "lelgw_ip"; LELGW_IP = gcnf[key] if key in gcnf else "128.2.212.53"
@@ -92,17 +92,17 @@ def configure():
     ''' necessary node specific '''
     LOGFILE= "database_cleanup.log"
     key = "icmp_db"; CLOUDLET_ICMP_DB = ccnf[key] if key in ccnf else "cloudleticmp"
-    key = "icmp_db"; WATERSPOUT_ICMP_DB = wcnf[key] if key in wcnf else "cloudleticmp"
+    key = "icmp_db"; MAGMA_ICMP_DB = wcnf[key] if key in wcnf else "magmaicmp"
     key = "icmp_db"; UE_ICMP_DB = ucnf[key] if key in ucnf else "ueicmp"
     
-    measuredict = {CLOUDLET_ICMP_DB:['latency'],UE_ICMP_DB:['latency'],WATERSPOUT_ICMP_DB:['latency']
-               ,SEG_DB:['uplink','downlink'],OFFSET_DB:['winoffset']}
+    measuredict = {CLOUDLET_ICMP_DB:['latency'],UE_ICMP_DB:['latency'],MAGMA_ICMP_DB:['latency']
+               ,SEG_DB:['segments'],OFFSET_DB:['winoffset']}
      
     ''' Get all the clients '''
     seg_client = InfluxDBClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     df_seg_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=SEG_DB)
     df_cloudlet_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=CLOUDLET_ICMP_DB)
-    df_waterspout_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=WATERSPOUT_ICMP_DB)
+    df_magma_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=MAGMA_ICMP_DB)
     df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
     df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
     (options,_) = cmdOptions()
