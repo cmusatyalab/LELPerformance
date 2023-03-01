@@ -52,7 +52,7 @@ def main():
         ''' Pull the data from the cloudlet, magma and ue databases '''
         try:
             latencydf,newblacklist = getLatencyData()
-            blacklist += newblacklist
+            # blacklist += newblacklist
         except Exception as e:
             mconsole("Did not get any latency data: {}".format(e),level = "ERROR")
             continue
@@ -338,8 +338,8 @@ def makeLegHashDict():
 
 ''' Write into influxdb '''
 def writePkt(row, client):
-        mconsole(f"Writing measurement -- sequence={row.sequence} start={row.DTDATE}",level="DEBUG")
-    # try:
+    mconsole(f"Writing measurement -- sequence={row.sequence} start={row.DTDATE}",level="DEBUG")
+    try:
         pkt_entry = {"measurement":"segments", 
                      "tags": {"sequence": row.sequence}, 
                      "fields":{"ue_xran": row.ue_xran, 'ue_xran_adjust':row.ue_xran_adjust,
@@ -351,8 +351,9 @@ def writePkt(row, client):
                                 'rtt':row.rtt,"time":int(row.start*1e6),"HTIME":row.STRDATE}
                      }
         client.write_points([pkt_entry], time_precision = 'u')
-    # except:
-    #     mconsole("Bad measurement: {}".format(row),level="ERROR")
+    except Exception as e:
+        if e.code != 400:  # ignore type errors
+            mconsole(f"Bad measurement: {row} {e}",level="ERROR")
 
 DEFAULTS =    {    
     "lelgw_ip":"128.2.212.53",
