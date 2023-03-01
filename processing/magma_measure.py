@@ -69,7 +69,7 @@ def job_execute(**cnf):
     key = "enb_ip";         ENB_IP = cnf[key] if key in cnf else DEFAULTS[key]
     key = "lelgw_ip";       LELGW_IP = cnf[key] if key in cnf else DEFAULTS[key]
     key = "cloudlet_ip" ;   CLOUDLET_IP = cnf[key] if key in cnf else DEFAULTS[key]
-    key = "ue_ip";          UE_IP = cnf[key] if key in cnf else getUEIP();
+    key = "ue_ip";          UE_IP = getUEIP() if cnf['SYSTEM'] == "UE" else DEFAULTS[key];
     key = "influxdb_port";  INFLUXDB_PORT = cnf[key] if key in cnf else DEFAULTS[key]
     key = "influxdb_ip";    INFLUXDB_IP = cnf[key] if key in cnf else DEFAULTS[key]
     

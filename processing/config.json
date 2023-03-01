@@ -11,7 +11,7 @@
 		"sg1_ip":"192.168.122.47",
 		"sg1_interface":"eth0",
 		"influxdb_adminport":"8088",
-		"ue_ip":"192.168.128.17",
+		"ue_ip":"192.168.128.25",
 		"influxdb_backup_root":"~/influxdb_backup",
 		"timezone":"America/New_York"
 	},
