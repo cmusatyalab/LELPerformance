@@ -184,7 +184,10 @@ def cleanLatencyData(fdf):
     
     ''' Remove partial and duplicate sequences '''
     tdfz = tdfz[(tdfz.COUNT == 8)]
-    tdfz[['direction','STEP','LEGNAME']] = tdfz.apply(lookupLeg,axis=1, result_type='expand')
+    try:
+        tdfz[['direction','STEP','LEGNAME']] = tdfz.apply(lookupLeg,axis=1, result_type='expand')
+    except:
+        pass
     return tdfz
 
 def configure():
