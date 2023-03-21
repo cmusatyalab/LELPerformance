@@ -9,6 +9,8 @@ The aim of this project is to determine the latency of each segment in the round
 
 The `processing` folder contains scripts to run for real-time segment latency analysis. The `preprocessing` folder contains the scripts used to collect and store latency measurements for preliminary experiments to analyze the effect of different factors on the segment latency. 
 
+In Q1'2023, this project was integrated into the Living Edge Lab Magma based network and eliminated the need for the separate **Intra-CN** server.
+
 ## Collecting Latency Measurements
 We receive and inspect each incoming packet using [Pyshark](https://github.com/KimiNewt/pyshark), a Python wrapper for Wireshark. From this, we can extract fields necessary to correlate packets at each probe. 
 
@@ -23,8 +25,6 @@ sudo tcpdump -s 0 -U -w - -i eno2 not port 22 | python magma_measure.py -O -S CL
 sudo tcpdump -s 0 -U -w - -i any not port 22 | python3 magma_measure.py -O -S MAGMA
 
 sudo tcpdump -s 0 -U -w - -i enx0016083656d3 | python3 magma_measure.py -O -S UE
-
-
 ```
 
 The interface names will be specific to the network used. They can be obtained with the `ip a` command on linux systems. We used a Multitech USB dongle to connect the laptop to our CBRS network. Configuring that dongle on Linux required adding it to the `netplan` configuration. (See the dongle.cfg file for more details.)
