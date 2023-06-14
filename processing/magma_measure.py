@@ -84,7 +84,7 @@ def job_execute(**cnf):
         icmp_client.alter_retention_policy("autogen", database=ICMP_DB, duration="30d", default=True)
        
     # Acceptable IP addresses to track at system
-    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,SG1_IP,S1_IP,ENB_IP]
+    IP_ADDR = [CLOUDLET_IP, UE_IP,LELGW_IP,SG1_IP,S1_IP,ENB_IP,EPC_IP]
     
     if ('filename' in cnf and cnf['filename'] is not None and os.path.isfile(cnf['filename'])):
         ''' Receive input from pcap file '''

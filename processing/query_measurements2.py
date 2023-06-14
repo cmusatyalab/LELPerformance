@@ -273,7 +273,7 @@ def checkAgainstCurrent(newdf):
     try:
         seg_df = df_seg_client.query("select * from {}".format(measure))[measure]
     except:
-        return newdf
+        return newdf,[]
     seqlst = list(set(seg_df.sequence))
     return newdf[~newdf.sequence.isin(seqlst)],seqlst
 
