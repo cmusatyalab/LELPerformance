@@ -135,9 +135,9 @@ def getLatencyData():
         tdfy = pd.concat([tdfy,tdfx],sort=True)
         
     ''' TIMESTAMP '''
-        tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
-        tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
-        tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
+    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
+    tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
     
     ''' Only keep sequences that are in all three dataframes '''
     newblacklist = list(set(tdfy.sequence[~tdfy.sequence.isin(seqminset)]))
