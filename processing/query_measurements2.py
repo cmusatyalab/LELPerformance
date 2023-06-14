@@ -135,9 +135,9 @@ def getLatencyData():
         tdfy = pd.concat([tdfy,tdfx],sort=True)
         
     ''' TIMESTAMP '''
-    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
-    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
-    tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
+        tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+        tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
+        tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
     
     ''' Only keep sequences that are in all three dataframes '''
     newblacklist = list(set(tdfy.sequence[~tdfy.sequence.isin(seqminset)]))
@@ -332,6 +332,7 @@ def makeLegHashDict():
     cloudletdown = makeHashString("cloudlet",CLOUDLET_IP, EPC_IP); leghashdict[cloudletdown] = ("downlink",4,"cloudlet_out")
     xrandownsg1 = makeHashString("magma", CLOUDLET_IP,SG1_IP); leghashdict[xrandownsg1] = ("downlink",5,"epc_cloudlet")
     xrandown = makeHashString("magma", S1_IP,ENB_IP); leghashdict[xrandown] = ("downlink",6,"xran_epc")
+    xrandown = makeHashString("magma", SG1_IP,ENB_IP); leghashdict[xrandown] = ("downlink",6,"xran_epc")
     uedown = makeHashString("ue",CLOUDLET_IP,UE_IP); leghashdict[uedown] = ("downlink",7,"ue_xran")
     
     return leghashdict
