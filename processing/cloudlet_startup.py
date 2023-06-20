@@ -30,7 +30,7 @@ def main():
     kwargs = configure()
     tcpdumpcmd = f"gnome-terminal -- bash -c 'tcpdump -s 0 -U -w - -i {kwargs['cloudlet_interface']} | python3 magma_measure.py -O -S CLOUDLET'"
     querycmd =  "gnome-terminal -- bash -c 'python query_measurements.py'"
-    mconsole("Starting ue processes")
+    mconsole("Starting cloudlet processes")
     
     cmdlst = [tcpdumpcmd, querycmd]
     for cmdstr in cmdlst:
