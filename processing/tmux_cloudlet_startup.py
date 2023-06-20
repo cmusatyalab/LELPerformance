@@ -28,19 +28,16 @@ def main():
     LOGFILE="cloudlet_startup.log"
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     kwargs = configure()
-    cloudlet_ip = kwargs['cloudlet_ip']
-    ue_interface = kwargs['ue_interface']
+    cloudlet_interface = kwargs['cloudlet_interface']
     
     tmuxstartcmd = "tmux start-server"
-    offsetcmd = f'tmux new-session -d -s {SESSIONNAME} -n magmastartup -d "bash -c \'python ue_offset.py\'"'
-    iperfcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'python ue_iperf.py\'"'
-    pingcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'ping {cloudlet_ip}\'"'
-    tcpdumpcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'tcpdump -s 0 -U -w - -i {ue_interface} | python3 magma_measure.py -O -S UE\'"'
+    tcpdumpcmd = f'tmux new-session -d -s {SESSIONNAME} -n cloudletstartup -d "bash -c \'tcpdump -s 0 -U -w - -i {cloudlet_interface} | python3 magma_measure.py -O -S CLOUDLET\'"'
+    querycmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'python query_measurements.py\'"'
     tmuxtiled = f'tmux select-layout -t {SESSIONNAME}:0 tiled'
     tmuxattach = f'tmux attach -t {SESSIONNAME}'
     mconsole("Starting ue processes")
     
-    cmdlst = [tmuxstartcmd, offsetcmd,iperfcmd,pingcmd,tcpdumpcmd,tmuxtiled,tmuxattach]
+    cmdlst = [tmuxstartcmd,tcpdumpcmd,tmuxtiled,querycmd, tmuxattach]
     for cmdstr in cmdlst:
         oscmd(cmdstr)
 
@@ -58,7 +55,7 @@ def configure():
             cnf = json.load(f)
         cnf.update(cmdopts)
         cnf.update(cnf['GENERAL'])
-        cnf.update(cnf['UE'])
+        cnf.update(cnf['CLOUDLET'])
     else:
         cnf = cmdopts
     return cnf
