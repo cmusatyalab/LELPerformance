@@ -20,13 +20,7 @@ import simlogging
 from simlogging import mconsole
 from local_common import *
 
-if os.name == 'nt':
-    OSNAME='WINDOWS'
-elif os.name == 'posix':
-    OSNAME='LINUX'
-else:
-    OSNAME='OTHER'
-    
+  
 LOGNAME=__name__
 LOGLEV = logging.INFO
 
@@ -42,7 +36,7 @@ TZ = pytz.timezone('America/New_York')
 
 def main():
     global logger
-    LOGFILE="{}_iperf.log".format(OSNAME)
+    LOGFILE="iperf.log"
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     kwargs = configure()
     influx_client = InfluxDBClient(host=CLOUDLET_IP, port=CLOUDLET_PORT, database=DBNAME)
