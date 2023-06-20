@@ -18,3 +18,7 @@
 /ping_any_vlan25.pcap
 /ping_any_vnet0.pcap
 /tshark.pcap
+/tdfy.csv
+/debug2.csv
+/tdfz.csv
+/cloudlet_startup.log

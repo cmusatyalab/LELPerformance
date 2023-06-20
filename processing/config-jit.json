@@ -20,7 +20,8 @@
 		"eclipse_debug": false,
 		"tcp_db":"cloudlettcp",
 		"icmp_db":"cloudleticmp",
-		"fifo_name":"clfifo"
+		"fifo_name":"clfifo",
+		"cloudlet_interface":"enp0s31f6"
 	},
 	"WATERSPOUT":{
 		"logfile":"waterspout_measure.log",
