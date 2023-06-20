@@ -5,6 +5,7 @@ import sys
 sys.path.append("../lib")
 import os
 import json
+import traceback
 from influxdb import InfluxDBClient, DataFrameClient
 import numpy as np
 import pandas as pd
@@ -29,12 +30,14 @@ from local_common import *
 def main():
     ''' INITIALIZATION '''
     global blacklist
+    blacklist = []
     kwargs = configure()
     ''' Logging '''
     loglev = LOGLEV if not kwargs['debug'] else logging.DEBUG
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = loglev,coloron=False)
     
     firsttime = True
+    
     
     ''' END INITIALIZATION '''
     
@@ -48,97 +51,67 @@ def main():
         
         ''' Pull the data from the cloudlet, magma and ue databases '''
         try:
-            latencydf = getLatencyData()
+            latencydf,newblacklist = getLatencyData()
+            # blacklist += newblacklist
         except Exception as e:
             mconsole("Did not get any latency data: {}".format(e),level = "ERROR")
             continue
         
-        ''' Is it already in the segmentation database? '''
-        latencydf = checkAgainstCurrent(latencydf)
-        if noMeasurements(latencydf,tag="no new"): continue
-        else: mconsole("Retrieved {} possible sequences (Sequence Nos: {})" \
-                       .format(len(list(set(latencydf.sequence))),list(set(latencydf.sequence))),level="DEBUG")
-        fullseqlst = list(set(latencydf.sequence))
-        ''' Group the sequences and clean up '''
-        tdfz = latencydf.copy().sort_values(['sequence','TIMESTAMP'])
+        preseq = list(set(latencydf.sequence))
         
-        ''' Make a small df that has just the number of times a sequence appears in the df '''
-        tdfz = renamecol(tdfz.groupby(by='sequence') \
-                .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
-        
-        ''' Join the small df with bigger '''
-        tdfz = tdfz.set_index('sequence').join(latencydf.set_index('sequence')) \
-                .reset_index().sort_values(['sequence','STEP'])
-        tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch'])
-        
-        ''' Check for complete sequence data from all probes '''
-        preseq = list(set(tdfz.sequence))
-        ''' Remove partial sequences '''
-        tdfz = tdfz[tdfz.COUNT >= 8] 
-        
+        tdfz = cleanLatencyData(latencydf)
+        if tdfz is None: continue
+       
         ''' Add partial sequences to the blacklist '''
         if noMeasurements(tdfz,tag="partial data"): 
-            mconsole("Sequence(s) {} added to blacklist".format(preseq),level = "DEBUG")
+            mconsole(f"Sequence(s) {preseq} added to blacklist",level = "DEBUG")
             blacklist += preseq
             continue
-        else: mconsole("Retrieved {} possibly complete sequences (Sequence Nos: {})" \
-                       .format(len(list(set(tdfz.sequence))),list(set(tdfz.sequence))),level="DEBUG") # 2 for uplink and downlink
+        compseq = list(set(tdfz.sequence));
+        mconsole(f"Retrieved {len(compseq)} possibly complete sequences (Sequence Nos: {compseq})" \
+                       ,level="DEBUG") # 2 for uplink and downlink
         
-        ''' Calculate difference between each step ; save the epoch from the UE uplink as the start of the sequence '''
-        tdfz['DELTA'] = tdfz.epoch - tdfz.epoch.shift(1)
-        tdfz['LASTEPOCH'] = tdfz.epoch.shift(1)
-        tdfz['DELTA'] = tdfz.apply(lambda row: row['epoch'] if 'ue' in row.NAME and 'uplink' in row.direction else row.DELTA, axis=1)
-        
-        ''' Calculate the round trip time (RTT) two different ways '''
-        '''RTT and STEPSUM should be the same; RTT is the (end - start) at the UE; STEPSUM is the sum of the DELTAS '''
-        tdfz['RTT'] =  tdfz.epoch - tdfz.epoch.shift(7)
-        tdfz['RTT'] = tdfz.apply(lambda row: row['RTT'] \
-                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
-        tdfz['STEPSUM'] = tdfz.DELTA.rolling(min_periods=1, window=7).sum()
-        tdfz['STEPSUM'] = tdfz.apply(lambda row: row['STEPSUM'] \
-                        if 'ue' in row.NAME and 'downlink' in row.direction else np.nan, axis=1).fillna(method='bfill')
-
-        ''' Convert the DF for storage in the segmentation database '''
-        indlst = ['sequence','direction','RTT','STEPSUM']
-        keepcol = ['sequence','epoch','TIMESTAMP','NAME','direction','DELTA','STEP','LEGNAME','STEPSUM','RTT','LASTEPOCH']
-        tdfx = tdfz.copy()[tdfz.COUNT >= 8][keepcol].sort_values(['sequence','STEP']) \
-                        .reset_index(drop=True).drop_duplicates()
-
         ''' Pivot the data '''
-        tdfx = tdfx.drop_duplicates(subset = indlst + ['LEGNAME'])
-        debugdf = tdfx.copy()
-        tdfx = tdfx.pivot(index=indlst, columns=['LEGNAME'], values=['DELTA']).reset_index()
-        ''' Get rid of multilevel index '''
-        tdfx.columns = ["".join(a).replace("DELTA","") for a in tdfx.columns.to_flat_index()]
+        tdfx = tdfz.copy()
+        tdfx = tdfx.pivot_table(index='sequence', columns='STEP', values=['epoch'])
+        tdfx.columns = [ "".join([str(x) for x in a]).replace("epoch","") \
+                        for a in tdfx.columns.to_flat_index()] # Flatten and clean up index
+        
+        lastcol = None
+        for ii,col in enumerate(tdfx.columns): # TODO more pandas way
+            scol = legdict[col]
+            if ii == 0:
+                tdfx[scol] = tdfx[col]
+                lastcol = col
+                continue
+            tdfx[scol] = tdfx[col] - tdfx[lastcol]
+            lastcol = col
+        tdfx['end'] = tdfx[col] # last column
+        tdfx['rtt'] = tdfx['end'] - tdfx['start']
+        debugDF(tdfx,"debug2")
         if noMeasurements(tdfx,tag="nothing after pivot") or "start" not in tdfx.columns: continue
-        ''' Propagate the start time to the downlink '''
-        tdfx = tdfx.sort_values(['sequence','direction'],ascending=[True,False])
-        try: 
-            tdfx['start'] = tdfx.start.fillna(method='ffill').dropna()
-        except:
-            mconsole("No start field in data frame",level="ERROR")
-            continue
-        tdfx = tdfx.dropna(subset=['start'])
         tdfx['DTDATE'] = tdfx.start.map(lambda cell: datetime.datetime.fromtimestamp(cell,tz=pytz.timezone(TZ)))
+        tdfx['STRDATE'] = tdfx.DTDATE.map(lambda x: x.strftime("%Y-%m-%d %H:%M:%S.%f"))
         
         ''' Find the offset '''
         tdfx['offset'] = getOffset(startts = tdfx.start.min(),endts = tdfx.start.max(),filteroffset=kwargs['filteroffset'])
 
         ''' adjust the ue_xran latencies to correct for offset'''
-        tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset \
-                                            if row.direction == 'uplink' else row.ue_xran + row.offset, \
-                                            axis=1)
-        
-        ''' Cleanup the cloudlet processing time '''
-        tdfx['cloudlet_proc'] = tdfx.cloudlet_proc.map(lambda col: col if not np.isnan(col) else 0)
-        
+        tdfx['ue_xran_adjust'] = tdfx.apply(lambda row: row.ue_xran - row.offset, axis=1)
+        tdfx['xran_ue_adjust'] = tdfx.apply(lambda row: row.xran_ue + row.offset,axis=1)
+               
         ''' Write to the segmentation database '''
-        tdfx = tdfx.dropna()
-        blacklist += list(set(fullseqlst) - set(tdfx.sequence) - set(blacklist))
+        tdfx = tdfx.dropna().reset_index()
+        # blacklist += list(set(fullseqlst) - set(tdfx.sequence) - set(blacklist)) # TODO fix blacklist
         mconsole("Writing {} measurements to the segmentation database  (Sequence Nos: {})" \
                  .format(len(tdfx),list(set(tdfx.sequence))))
         tdfx[:].apply(writePkt,client = seg_client, axis=1)
-
+        
+def debugDF(fdf,name):
+    try:
+        writejoin(fdf,".",f"{name}.csv")
+    except:
+        mconsole(f"Couldn't write {name}.csv")
 
 
 def getLatencyData():            
@@ -146,49 +119,85 @@ def getLatencyData():
     measure = 'latency'
     cloudlet_icmp_df = df_cloudlet_icmp_client.query("select * from {}".format(measure))[measure]
     magma_icmp_df = df_magma_icmp_client.query("select * from {}".format(measure))[measure]
-    ''' Eliminate duplicate magma packets -- fix for XRAN double reporting with different epochs '''
-    magma_icmp_df = magma_icmp_df.groupby(by=['sequence','src','dst']).agg({'epoch':'min'}) \
-                .sort_values('epoch').reset_index()
-    
     ue_icmp_df = df_ue_icmp_client.query("select * from {}".format(measure))[measure]
     
     ''' Get list of sequences in all three dataframes '''
     seqminset = list(set(ue_icmp_df.sequence) \
         .intersection((set(cloudlet_icmp_df.sequence) \
         .intersection(set(magma_icmp_df.sequence)))))
-    
+        
     ''' Combine the nodes '''
     dflst = [(cloudlet_icmp_df,'cloudlet'),(magma_icmp_df,'magma'),(ue_icmp_df,'ue')]
     tdfy = pd.DataFrame()
     for tup in dflst:
         tdfx = tup[0]
         tdfx['NAME'] = tup[1]
-        # tdfy = tdfy.append(tdfx)
-        tdfy = pd.concat([tdfy,tdfx])
-    writejoin(tdfy,".","tdfx.csv")    
-    ''' Only keep sequences that are in all three dataframes '''
-    tdfy = tdfy[tdfy.sequence.isin(seqminset)]
+        tdfy = pd.concat([tdfy,tdfx],sort=True)
+        
+    ''' TIMESTAMP '''
+    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
+    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
+    tdfy = tdfy[tdfy.TIMESTAMP >= getMidnight()] # TODO Parameterize
     
+    ''' Only keep sequences that are in all three dataframes '''
+    newblacklist = list(set(tdfy.sequence[~tdfy.sequence.isin(seqminset)]))
+    
+    tdfy = tdfy[tdfy.sequence.isin(seqminset)]
     ''' Only keep sequences that are not on blacklist '''
     tdfy = checkAgainstBlacklist(tdfy)
     
     ''' Label the segments in what remains '''
-    
-    tdfy['TIMESTAMP']= pd.to_datetime(tdfy['epoch'],unit='s',utc=True) # convenience
-    tdfy = changeTZ(tdfy,col='TIMESTAMP',origtz='UTC', newtz=TZ)
 
-    tdfy[['direction','STEP','LEGNAME']] = tdfy.apply(lookupLeg,axis=1, result_type='expand')
-    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
     
-    return tdfy
+    tdfy = tdfy.drop_duplicates(['NAME','src','dst','sequence'])
+    try:
+        writejoin(tdfy,".","tdfy.csv")
+    except:
+        mconsole("Can't write to tdfy.csv")
+        
+    
+    tdfy = renamecol(tdfy.reset_index().copy(),col='index',newname='influxts')
+
+    return tdfy,newblacklist
+
+def cleanLatencyData(fdf):
+    ''' Is it already in the segmentation database? '''
+    fdf,newblacklist = checkAgainstCurrent(fdf)
+    if noMeasurements(fdf,tag="no new"): return None
+    fullseqlst = list(set(fdf.sequence))
+    mconsole(f"Retrieved {len(fullseqlst)} possible sequences (Sequence Nos: {fullseqlst})" \
+                   ,level="DEBUG")
+    ''' Group the sequences and clean up '''
+    tdfz = fdf.copy().sort_values(['sequence','TIMESTAMP'])
+    
+    ''' Make a small df that has just the number of times a sequence appears in the df '''
+    tdfz = renamecol(tdfz.groupby(by='sequence') \
+            .agg('count').reset_index()[['sequence','TIMESTAMP']],col='TIMESTAMP',newname='COUNT')
+    
+    ''' Join the small df with bigger '''
+    tdfz = tdfz.set_index('sequence').join(fdf.set_index('sequence')) \
+            .reset_index().sort_values(['sequence'])
+    tdfz = tdfz.drop_duplicates(subset = ['sequence','NAME','epoch']) # pure duplicates
+    
+    writejoin(tdfz,".","tdfz.csv")
+    ''' Check for complete sequence data from all probes '''
+    
+    ''' Remove partial and duplicate sequences '''
+    tdfz = tdfz[(tdfz.COUNT == 8)]
+    try:
+        tdfz[['direction','STEP','LEGNAME']] = tdfz.apply(lookupLeg,axis=1, result_type='expand')
+    except:
+        pass
+    return tdfz
 
 def configure():
     global seg_client;global df_seg_client; global df_cloudlet_icmp_client
     global df_magma_icmp_client;global df_ue_icmp_client;global df_offset_client
-    global TZ; global CLOUDLET_IP; global EPC_IP;
+    global TZ; 
     global INFLUXDB_IP; global INFLUXDB_PORT; global SEG_DB
     global LOGFILE; global LOGNAME; global LOGLEV
-    global legdict; global blacklist
+    global legdict; global leghashmap
+    global S1_IP; global SG1_IP; global CLOUDLET_IP; global EPC_IP; global UE_IP; global LEGW_IP; global ENB_IP
 
     LOGNAME=__name__
     LOGLEV = logging.INFO
@@ -203,6 +212,7 @@ def configure():
             ucnf = cnf['UE']
             ccnf = cnf['CLOUDLET']
             mcnf = cnf['MAGMA']
+    cnf.update(cnf['GENERAL'])
     ''' General '''
     key = "epc_ip";         EPC_IP = cnf[key] if key in cnf else DEFAULTS[key]
     key = "s1_ip";          S1_IP = cnf[key] if key in cnf else DEFAULTS[key]
@@ -231,12 +241,9 @@ def configure():
     df_ue_icmp_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=UE_ICMP_DB)
     df_offset_client = DataFrameClient(host=INFLUXDB_IP, port=INFLUXDB_PORT, database=OFFSET_DB)
     
-    ''' For labeling segments '''
-    legdict = {1: 'ue_xran',2:'xran_epc',3:'epc_cloudlet',
-           7: 'ue_xran',6:'xran_epc',5:'epc_cloudlet',0:'start',4:'cloudlet_proc'}
-    
-    ''' For bad sequences '''
-    blacklist = []
+    leghashmap = makeLegHashDict()
+    legdict = {'0':'start', '1': 'ue_xran','2':'xran_epc','3':'epc_cloudlet',
+           '7': 'xran_ue','6':'epc_xran','5':'epc_cloudlet','4':'cloudlet_epc'}
     
     (options,_) = cmdOptions()
     kwargs = options.__dict__.copy()
@@ -262,14 +269,13 @@ def noMeasurements(fdf,tag='no info'):
 
 def checkAgainstCurrent(newdf):
     ''' Is the sequence already in the database '''
-    
-    measure = 'uplink'
+    measure = 'segments'
     try:
-        seg_ul_df = df_seg_client.query("select * from {}".format(measure))[measure]
+        seg_df = df_seg_client.query("select * from {}".format(measure))[measure]
     except:
-        return newdf
-    seqlst = list(set(seg_ul_df.sequence))
-    return newdf[~newdf.sequence.isin(seqlst)]
+        return newdf,[]
+    seqlst = list(set(seg_df.sequence))
+    return newdf[~newdf.sequence.isin(seqlst)],seqlst
 
 def checkAgainstBlacklist(indf):
     retdf = indf[~indf.sequence.isin(blacklist)]
@@ -300,48 +306,58 @@ def getOffset(startts = None, endts = None, measure = 'winoffset',filteroffset =
 
 ''' Label the legs '''
 def lookupLeg(row):
+    ''' For labeling segments '''
     src = row.src
     dst = row.dst
     name = row.NAME
     ddir = np.nan
     step = np.nan
-    if dst == CLOUDLET_IP:
-        ddir = "uplink"        
-    elif src == CLOUDLET_IP:
-        ddir = "downlink"
-    elif dst == EPC_IP:
-        ddir = "uplink"
-    elif src == EPC_IP:
-        ddir = "downlink"
-    if ddir == 'uplink':
-        if name == 'ue': step = 0
-        elif name == 'cloudlet': step = 3
-        elif name == 'magma': step = 1 if dst == EPC_IP else 2                
-    elif ddir == 'downlink':
-        if name == 'ue': step = 7
-        elif name == 'cloudlet': step = 4
-        elif name == 'magma': step = 5 if dst == EPC_IP else 6
+    legname = "unknown"
+    
     try:
-        legname = legdict[step]
+        ddir,step,legname = leghashmap[makeHashString(name,src,dst)]
     except:
-        legname = "unknown"
-        
+        mconsole(f"Bad step: {name} {src} {dst}")
     return (ddir,step,legname)
+
+def makeHashString(name,src,dst):
+    return f"{name}/{src}/{dst}"
+def makeLegHashDict():
+    leghashdict = {}
+    ueup = makeHashString("ue",UE_IP,CLOUDLET_IP); leghashdict[ueup] = ("uplink",0,"start")
+    epcups1 = makeHashString("magma", ENB_IP,S1_IP); leghashdict[epcups1] = ("uplink",1,"xran_epc")
+    epcupsg1 = makeHashString("magma", SG1_IP,CLOUDLET_IP); leghashdict[epcupsg1] = ("uplink",2,"epc_cloudlet")
+    cloudletup = makeHashString("cloudlet", EPC_IP,CLOUDLET_IP); leghashdict[cloudletup] = ("uplink",3,"cloudlet_in")
+    
+    cloudletdown = makeHashString("cloudlet",CLOUDLET_IP, EPC_IP); leghashdict[cloudletdown] = ("downlink",4,"cloudlet_out")
+    xrandownsg1 = makeHashString("magma", CLOUDLET_IP,SG1_IP); leghashdict[xrandownsg1] = ("downlink",5,"epc_cloudlet")
+    xrandown = makeHashString("magma", S1_IP,ENB_IP); leghashdict[xrandown] = ("downlink",6,"xran_epc")
+    xrandown = makeHashString("magma", SG1_IP,ENB_IP); leghashdict[xrandown] = ("downlink",6,"xran_epc")
+    uedown = makeHashString("ue",CLOUDLET_IP,UE_IP); leghashdict[uedown] = ("downlink",7,"ue_xran")
+    
+    return leghashdict
+    
+    # s1up = f"magma/{"
+    
 
 ''' Write into influxdb '''
 def writePkt(row, client):
-        mconsole("Writing measurement -- sequence={} direction={} start={}".format(row.sequence,row.direction,row.start),level="DEBUG")
-    # try:
-        pkt_entry = {"measurement":row['direction'], 
-                     "tags": {"sequence": row['sequence'],"direction": row['direction']}, 
-                     "fields":{"ue_xran": row['ue_xran'], 'ue_xran_adjust':row['ue_xran_adjust'],
-                               'offset':row['offset'],"xran_epc": row['xran_epc'], 
-                                "epc_cloudlet": row['epc_cloudlet'], "start": row['start'],
-                                "cloudlet_proc": row['cloudlet_proc'],
-                                'rtt':row.RTT,'stepsum':row.STEPSUM},"time":int(row['start']*1e6)}
+    mconsole(f"Writing measurement -- sequence={row.sequence} start={row.DTDATE}",level="DEBUG")
+    try:
+        pkt_entry = {"measurement":"segments", 
+                     "tags": {"sequence": row.sequence}, 
+                     "fields":{"ue_xran": row.ue_xran, 'ue_xran_adjust':row.ue_xran_adjust,
+                               "xran_ue": row.xran_ue, 'xran_ue_adjust':row.xran_ue_adjust,
+                               "epc_xran": row.epc_xran,"xran_epc": row.xran_epc,
+                               "epc_cloudlet": row.epc_cloudlet,"cloudlet_epc": row.cloudlet_epc,
+                               'offset':row.offset, "start": row.start,
+                                "end": row.end,
+                                'rtt':row.rtt,"time":int(row.start*1e6),"HTIME":row.STRDATE}
+                     }
         client.write_points([pkt_entry], time_precision = 'u')
-    # except:
-    #     mconsole("Bad measurement: {}".format(row),level="ERROR")
+    except Exception as e:
+        if e.code != 400:  # ignore type errors
+            mconsole(f"Bad measurement: {row} {e}",level="ERROR")
 
 DEFAULTS =    {    
     "lelgw_ip":"128.2.212.53",
@@ -355,7 +371,7 @@ DEFAULTS =    {
     "influxdb_adminport":"8088",
     "influxdb_backup_root":"~/influxdb_backup",
     "timezone":"America/New_York" ,
-    "ue_ip":"192.168.128.13",
+    "ue_ip":"192.168.128.22",
     "seg_db":"segmentation",
     "offset_db":"winoffset"
 }
