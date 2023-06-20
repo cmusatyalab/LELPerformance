@@ -76,8 +76,8 @@ def parseIperf(results = None, timezone = None, **kwargs):
     tdfx['TIMESTAMP']= pd.to_datetime(tdfx['timesecs'],unit='s',utc=True) # convenience
     tdfx = changeTZ(tdfx,col='TIMESTAMP',origtz='UTC', newtz=timezone)
     tdfx = renamecol(tdfx,col='time',newname='humantime')
-    tdfx = renamecol(tdfx,col='received_Mbps',newname='uplink')
-    mconsole(f"Mbps={list(tdfx.uplink)}",level="DEBUG")
+    tdfx = renamecol(tdfx,col='received_Mbps',newname='downlink')
+    mconsole(f"Mbps={list(tdfx.downlink)}",level="DEBUG")
     return tdfx[-1:]
 
 def getIperfClient(port = 5201, cloudlet_ip = None, ue_ip = None, **kwargs):
@@ -121,7 +121,7 @@ def cmdOptions():
 
     
 def writeInfluxDB(row,client = None):
-    mconsole(f"Writing measurement -- mbps={row.uplink} TIME={row.humantime}", level="DEBUG")
+    mconsole(f"Writing measurement -- mbps={row.downlink} TIME={row.humantime}", level="DEBUG")
     tagdict = {k:str(row[k]) for k in FIPERFTAGS}
     fielddict = {k:row[k] for k in FIPERFIELDS}
     pkt_entry = {"measurement":MEASURENAME,
@@ -141,7 +141,7 @@ IPERFCOLS = ['text', 'json', 'error', 'time', 'timesecs', 'system_info', 'versio
 IPERFIELDS = ['timesecs','received_Mbps']
 IPERFTAGS = ['time','local_host', 'remote_host']
 FIPERFTAGS = ['humantime','local_host', 'remote_host']
-FIPERFIELDS = ['timesecs','uplink']
+FIPERFIELDS = ['timesecs','downlink']
 
 
 if __name__ == '__main__': main()
