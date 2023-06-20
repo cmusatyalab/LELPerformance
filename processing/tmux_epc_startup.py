@@ -21,26 +21,26 @@ from local_common import *
     
 LOGNAME=__name__
 LOGLEV = logging.INFO
-SESSIONNAME="Magma"
+SESSIONNAME="EPC"
 
 def main():
     global logger
-    LOGFILE="magma_startup.log"
+    LOGFILE="epc_startup.log"
     logger = simlogging.configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,loglev = LOGLEV,coloron=False)
     kwargs = configure()
     cloudlet_ip = kwargs['cloudlet_ip']
     ue_interface = kwargs['ue_interface']
     
     tmuxstartcmd = "tmux start-server"
-    offsetcmd = f'tmux new-session -d -s {SESSIONNAME} -n magmastartup -d "bash -c \'python ue_offset.py\'"'
-    iperfcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'python ue_iperf.py\'"'
-    pingcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'ping {cloudlet_ip}\'"'
-    tcpdumpcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'tcpdump -s 0 -U -w - -i {ue_interface} | python3 magma_measure.py -O -S UE\'"'
+    tcpdumpcmd = f'tmux new-session -d -s {SESSIONNAME} -n epcstartup -d "bash -c \'tcpdump -s 0 -U -w - -i any | python3 magma_measure.py -O -S MAGMA\'"'
+    # iperfcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'python ue_iperf.py\'"'
+    # pingcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'ping {cloudlet_ip}\'"'
+    # tcpdumpcmd = f'tmux split-window -t {SESSIONNAME}:0 "bash -c \'tcpdump -s 0 -U -w - -i {ue_interface} | python3 magma_measure.py -O -S UE\'"'
     tmuxtiled = f'tmux select-layout -t {SESSIONNAME}:0 tiled'
     tmuxattach = f'tmux attach -t {SESSIONNAME}'
-    mconsole("Starting ue processes")
+    mconsole("Starting epc processes")
     
-    cmdlst = [tmuxstartcmd, offsetcmd,iperfcmd,pingcmd,tcpdumpcmd,tmuxtiled,tmuxattach]
+    cmdlst = [tmuxstartcmd,tcpdumpcmd,tmuxtiled,tmuxattach]
     for cmdstr in cmdlst:
         oscmd(cmdstr)
 
