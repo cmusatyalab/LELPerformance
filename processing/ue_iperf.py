@@ -43,14 +43,18 @@ def main():
     
     createDB(influx_client,DBNAME)
     mconsole("Starting iperf measurements")
+    reverse = False # Start with client to server
+    direction = "uplink"
     while True:
-        iperf_client = getIperfClient(**kwargs) 
+        iperf_client = getIperfClient(reverse = reverse, **kwargs)
         results = getIperf(client = iperf_client,**kwargs)
         if results is not None:
-            batch = parseIperf(results = results, **kwargs)
+            batch = parseIperf(results = results, direction = direction, **kwargs)
             mconsole("Writing {} iperf measurements".format(len(batch)))
-            batch.reset_index().apply(writeInfluxDB,client=influx_client, axis=1)
+            batch.reset_index().apply(writeInfluxDB, client=influx_client, axis=1)
         del iperf_client
+        reverse = False if reverse else True # Toggle
+        direction = "downlink" if direction == "uplink" else "uplink"
         time.sleep(int(kwargs['querytime']))
     pass
 
@@ -63,18 +67,19 @@ def getIperf(client = None, **kwargs):
         return None
     return results
 
-def parseIperf(results = None, timezone = None, **kwargs):
+def parseIperf(results = None, direction = None, timezone = None, **kwargs):
     tdfx = pd.DataFrame(results.__dict__)[IPERFIELDS + IPERFTAGS]
     # for col in tdfx.columns:
     #     mconsole(f"columns={col}, val={tdfx[col]} type = {type(tdfx[col].iloc[0])}", level="DEBUG")
+    tdfx['direction'] = direction
     tdfx['TIMESTAMP']= pd.to_datetime(tdfx['timesecs'],unit='s',utc=True) # convenience
     tdfx = changeTZ(tdfx,col='TIMESTAMP',origtz='UTC', newtz=timezone)
     tdfx = renamecol(tdfx,col='time',newname='humantime')
-    tdfx = renamecol(tdfx,col='received_Mbps',newname='downlink')
-    mconsole(f"Mbps={list(tdfx.downlink)}",level="DEBUG")
+    tdfx = renamecol(tdfx,col='received_Mbps',newname='throughput')
+    mconsole(f"Mbps={list(tdfx.throughput)}",level="DEBUG")
     return tdfx[-1:]
 
-def getIperfClient(port = 5201, cloudlet_ip = None, ue_ip = None, **kwargs):
+def getIperfClient(port = 5201, cloudlet_ip = None, reverse = False, ue_ip = None, **kwargs):
     client = iperf3.Client()
     client.duration = 1
     client.bind_address = ue_ip
@@ -84,7 +89,7 @@ def getIperfClient(port = 5201, cloudlet_ip = None, ue_ip = None, **kwargs):
     client.num_streams = 3
     client.zerocopy = True
     client.verbose = False
-    client.reverse = True
+    client.reverse = reverse
     return client
 
 def configure():
@@ -114,8 +119,8 @@ def cmdOptions():
     return  parser.parse_args()
 
     
-def writeInfluxDB(row,client = None):
-    mconsole(f"Writing measurement -- mbps={row.downlink} TIME={row.humantime}", level="DEBUG")
+def writeInfluxDB(row, client = None):
+    mconsole(f"Writing measurement -- mbps={row.throughput} direction = {row.direction} TIME={row.humantime}", level="INFO")
     tagdict = {k:str(row[k]) for k in FIPERFTAGS}
     fielddict = {k:row[k] for k in FIPERFIELDS}
     pkt_entry = {"measurement":MEASURENAME,
@@ -134,8 +139,8 @@ IPERFCOLS = ['text', 'json', 'error', 'time', 'timesecs', 'system_info', 'versio
 
 IPERFIELDS = ['timesecs','received_Mbps']
 IPERFTAGS = ['time','local_host', 'remote_host']
-FIPERFTAGS = ['humantime','local_host', 'remote_host']
-FIPERFIELDS = ['timesecs','downlink']
+FIPERFTAGS = ['humantime','local_host', 'remote_host','direction']
+FIPERFIELDS = ['timesecs','throughput']
 
 
 if __name__ == '__main__': main()
