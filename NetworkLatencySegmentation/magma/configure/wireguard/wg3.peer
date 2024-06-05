@@ -1,0 +1,4 @@
+[Peer]
+PublicKey = 2UmVJlfnJ6Ch/1mYM9u498Ch7P7R8SAiYASv3G56oiY=
+AllowedIPs = 192.168.25.51/32
+Endpoint = :50013
