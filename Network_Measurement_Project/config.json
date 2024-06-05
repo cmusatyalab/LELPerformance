@@ -1,0 +1,31 @@
+{
+	"PROJECTHOME":"/home/jblake1/git/CMUProjects/LEL/Network Project",
+	"DATADIR":"/home/jblake1/LEL_Network_Project",
+	"IPERFON":false,
+	"PINGON":true,
+	"TRACEROUTEON":false,
+	"CBRS": {
+		"IFC":"enx0016083656d3",
+		"NAMESPACE":"CBRS"
+	},
+	"TMOB": {
+		"IFC":"enx0050b623c78d",
+		"NAMESPACE":"TMOB"
+	},
+	"PINGCOUNT":10,
+	"PINGINTERVAL":"1",
+	"CMUCLOUDLET":{
+		"IP":"128.2.208.222",
+		"DN":"cloudlet004.elijah.cs.cmu.edu",
+		"IPERFPORT":"5201"
+	},
+	"AWSCLOUDLET":{
+		"IP":"54.91.23.217",
+		"DN":"ec2-54-91-23-217.compute-1.amazonaws.com",
+		"IPERFPORT":"5201"
+	},
+	"TRACEROUTEPATH":"/usr/sbin/traceroute",
+	"IPERF3PATH":"/usr/bin/iperf3",
+	"PINGPATH":"/usr/bin/ping",	
+	"SLEEPTIME":0
+}
