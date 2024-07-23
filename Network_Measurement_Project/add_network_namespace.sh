@@ -1,18 +1,11 @@
 #!/bin/bash
-test -z "$1" && NS="CBRS" || NS="$1"
+test -z "$1" && NS="LOCAL" || NS="$1"
+test -z "$2" && IFC="eno2" || IFC="$2"
+test -z "$3" && IP="128.2.208.222" || IP="$3"
+GW=$IP
 
-if [ "$NS" == "CBRS" ]
-then
-	NS=CBRS
-	IFC=enx0016083656d3
-	IP=192.168.128.88
-	GW=$IP
-else
-	NS=TMOB
-	IFC=enx0050b623c78d
-	IP=192.168.0.57
-	GW=$IP
-fi
+echo Adding NS=$NS IFC=$IFC IP=$IP
+
 # sudo ip netns del ${NS}
 sudo ip netns add ${NS}                                                                              
 sudo ip link set dev ${IFC} netns ${NS}                                                     

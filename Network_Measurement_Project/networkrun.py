@@ -3,6 +3,7 @@ import os
 import sys
 import platform
 # print(sys.path)
+sys.path.append("../lib")
 import subprocess
 import shutil
 import pandas as pd
@@ -32,18 +33,18 @@ def main():
     try:
         mconsole(f"Starting {__file__}")
         reverse = False
-        for NS in  ["CBRS","TMOB"]:
-            deleteNetworkNamespace(NS)
+        if(cnf['USENAMESPACES']): 
+            for NS in cnf['NETWORKS']: deleteNetworkNamespace(NS)
         while True:
             reverse = False if reverse else True
-            for NS in ["TMOB","CBRS"]:
-                addNetworkNamespace(NS)
-                for DEST in ["CMUCLOUDLET","AWSCLOUDLET"]:
+            for NS in cnf['NETWORKS']:
+                if(cnf['USENAMESPACES']): addNetworkNamespace(NS)
+                for DEST in cnf['DESTINATIONS']:
                     mconsole(f"TEST {DEST} over {NS}")
                     pingdf, iperfdf,tracertdf= runTestRound(cnf[DEST]['IP'],cnf[NS],cnf[DEST]['IPERFPORT'], reverse = reverse)
                     saveDF(pingdf, iperfdf,tracertdf)
                     pass
-                deleteNetworkNamespace(NS)
+                if(cnf['USENAMESPACES']): deleteNetworkNamespace(NS)
             mconsole(f"Sleeping for {cnf['SLEEPTIME']} minutes")
             time.sleep(cnf['SLEEPTIME']*60)
     except KeyboardInterrupt:
@@ -64,11 +65,12 @@ def runTestRound(dest, ns, port,reverse = False):
 def nping(dest, ns):
     ifc = ns['IFC']
     mconsole(f"Pinging {dest} via {ifc}")
-    pref=f"sudo ip netns exec {ns['NAMESPACE']}"
+    if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {ns['NAMESPACE']}"
+    else: pref=""
     # pref=""
     cmd = f"{pref} {cnf['PINGPATH']} -I {ifc} -c {cnf['PINGCOUNT']} -i {cnf['PINGINTERVAL']} {dest}"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}",level="ERROR") for line in result['stderr']]
+    console_stderr(result)
     tdfx = parsePing(result)
     tdfx['DEST'] = dest
     tdfx['IFC'] = ifc
@@ -81,11 +83,12 @@ def niperf(dest, ns, port,reverse=False):
     ifc = ns['IFC']
     tns = ns['NAMESPACE']
     mconsole(f"Running iperf3 to {dest} via {ifc} reverse={reverse}")
-    pref=f"sudo ip netns exec {tns}"
+    if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {tns}"
+    else: pref=""
     cmd = f"{pref} {cnf['IPERF3PATH']} -c {dest} -p {port}"
     if reverse: cmd = cmd + " -R"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}",level="ERROR") for line in result['stderr']]
+    console_stderr(result)
     tdfx = parseIperf(result)
     if tdfx.shape[0] == 0: mconsole("No iperf data received",level="ERROR")
     else: mconsole(f"Iperf returned: {tdfx.shape[0]} measurements")
@@ -97,11 +100,11 @@ def niperf(dest, ns, port,reverse=False):
 def ntraceroute(dest, ns):
     ifc = ns['IFC']
     mconsole(f"Running traceroute to {dest} via {ifc}")
-    pref=f"sudo ip netns exec {ns['NAMESPACE']}"
-    # pref=""
+    if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {ns['NAMESPACE']}"
+    else: pref=""
     cmd = f"{pref} {cnf['TRACEROUTEPATH']} -i {ifc} {dest}"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}",level="ERROR") for line in result['stderr']]
+    console_stderr(result)
     tdfx = parseTraceroute(result)
     if tdfx.shape[0] == 0: mconsole("No traceroute data received",level="ERROR")
     else: mconsole(f"Traceroute returned: {tdfx.shape[0]} measurements")
@@ -191,18 +194,18 @@ def addNetworkNamespace(ns):
     tns = ns
     cmd=f"sudo bash ./add_network_namespace.sh {tns}"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}",level="ERROR") for line in result['stderr']]
+    console_stderr(result)
     isNetworkNamespace(ns)
     pref=f"sudo ip netns exec {tns}"
     cmd = f"{pref} ip a"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}") for line in result['stdout']]
+    console_stdout(result)
 
 def deleteNetworkNamespace(ns):
     if not isNetworkNamespace(ns): return
     cmd=f"sudo bash -c 'bash ./del_network_namespace.sh {ns} && sudo netplan apply'"
     result = cmd_all(cmd)
-    devnull=[mconsole(f"{line}",level="ERROR") for line in result['stderr']]
+    console_stderr(result)
     
 def isNetworkNamespace(ns):
     retbool = False
