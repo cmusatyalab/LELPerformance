@@ -1,12 +1,12 @@
 {
 	"PROJECTHOME":"/home/jblake1/git/LELPerformance/Network_Measurement_Project",
 	"DATADIR":"/home/jblake1/LEL_Network_Project",
-	"IPERFON":false,
+	"IPERFON":true,
 	"PINGON":true,
-	"TRACEROUTEON":false,
+	"TRACEROUTEON":true,
 	"USENAMESPACES":false,
 	"NETWORKS":["LOCAL"],
-	"DESTINATIONS":["CMUCLOUDLET","GOOGLE"],
+	"DESTINATIONS":["CMUCLOUDLET20", "AWSCLOUDLET"],
 	"CBRS": {
 		"IFC":"enx0016083656d3",
 		"NAMESPACE":"CBRS"
@@ -26,6 +26,16 @@
 		"DN":"cloudlet004.elijah.cs.cmu.edu",
 		"IPERFPORT":"5201"
 	},
+	"CMUCLOUDLET04":{
+		"IP":"128.2.208.222",
+		"DN":"cloudlet004.elijah.cs.cmu.edu",
+		"IPERFPORT":"5201"
+	},
+	"CMUCLOUDLET20":{
+		"IP":"128.2.211.195",
+		"DN":"cloudlet020.elijah.cs.cmu.edu",
+		"IPERFPORT":"5201"
+	},
 	"AWSCLOUDLET":{
 		"IP":"54.91.23.217",
 		"DN":"ec2-54-91-23-217.compute-1.amazonaws.com",
@@ -39,5 +49,5 @@
 	"TRACEROUTEPATH":"/usr/sbin/traceroute",
 	"IPERF3PATH":"/usr/bin/iperf3",
 	"PINGPATH":"/usr/bin/ping",	
-	"SLEEPTIME":1
+	"SLEEPTIME":0
 }

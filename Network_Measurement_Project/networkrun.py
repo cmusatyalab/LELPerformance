@@ -89,6 +89,7 @@ def niperf(dest, ns, port,reverse=False):
     if reverse: cmd = cmd + " -R"
     result = cmd_all(cmd)
     console_stderr(result)
+    # console_stdout(result)
     tdfx = parseIperf(result)
     if tdfx.shape[0] == 0: mconsole("No iperf data received",level="ERROR")
     else: mconsole(f"Iperf returned: {tdfx.shape[0]} measurements")
@@ -102,7 +103,8 @@ def ntraceroute(dest, ns):
     mconsole(f"Running traceroute to {dest} via {ifc}")
     if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {ns['NAMESPACE']}"
     else: pref=""
-    cmd = f"{pref} {cnf['TRACEROUTEPATH']} -i {ifc} {dest}"
+    # cmd = f"{pref} {cnf['TRACEROUTEPATH']} -i {ifc} {dest}"
+    cmd = f"{pref} {cnf['TRACEROUTEPATH']} {dest}"
     result = cmd_all(cmd)
     console_stderr(result)
     tdfx = parseTraceroute(result)
@@ -129,10 +131,12 @@ def parseIperf(res):
     fnlines = res['stdout']
     rec = re.compile(" \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3} ")
     iplines = [line for line in fnlines if rec.search(line)]
-    rec = re.compile("sec .* MBytes .* Mbits/sec")
+    rec = re.compile("sec .* .*Bytes .* .*bits/sec")
     bwlines =[line for line in fnlines if rec.search(line)]
     datalines = [float(rec.findall(line)[0].split()[3]) for line in bwlines]
-    fdf = pd.DataFrame(datalines,columns=["THROUGHPUT"])
+    unitlines = [rec.findall(line)[0].split()[4] for line in bwlines]
+    fdf = pd.DataFrame(list(zip(datalines,unitlines)),columns=["THROUGHPUT","UNITS"])
+    fdf['THROUGHPUT'] = fdf.apply(lambda row: row.THROUGHPUT*1000 if row.UNITS.startswith("G") else row.THROUGHPUT,axis=1)
     nowtime = datetime.datetime.now();
     fdf['TIMESTAMP'] = nowtime
     fdf['HDATE'] = nowtime.strftime('%Y-%m-%d-%H-%M-%S-%f')
