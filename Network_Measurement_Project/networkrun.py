@@ -104,7 +104,7 @@ def ntraceroute(dest, ns):
     if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {ns['NAMESPACE']}"
     else: pref=""
     # cmd = f"{pref} {cnf['TRACEROUTEPATH']} -i {ifc} {dest}"
-    cmd = f"{pref} {cnf['TRACEROUTEPATH']} {dest}"
+    cmd = f"{pref} {cnf['TRACEROUTEPATH']} -m {cnf['TRACEROUTEMAXHOPS']} {dest}"
     result = cmd_all(cmd)
     console_stderr(result)
     tdfx = parseTraceroute(result)

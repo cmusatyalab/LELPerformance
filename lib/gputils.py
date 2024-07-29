@@ -10,8 +10,8 @@ import shapely
 from shapely.geometry import Point,LineString,Polygon,MultiPolygon
 from scipy.spatial import cKDTree
 
-from osgeo import ogr
-from osgeo import gdal,ogr,osr,gdalnumeric
+# from osgeo import ogr
+# from osgeo import gdal,ogr,osr,gdalnumeric
 import shapefile as shp  # Requires the pyshp package
 import matplotlib.pyplot as plt
 

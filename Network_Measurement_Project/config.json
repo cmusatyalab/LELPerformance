@@ -4,8 +4,9 @@
 	"IPERFON":true,
 	"PINGON":true,
 	"TRACEROUTEON":true,
+	"TRACEROUTEMAXHOPS":50,
 	"USENAMESPACES":false,
-	"NETWORKS":["LOCAL"],
+	"NETWORKS":["TMOB-USB"],
 	"DESTINATIONS":["CMUCLOUDLET20", "AWSCLOUDLET"],
 	"CBRS": {
 		"IFC":"enx0016083656d3",
@@ -19,10 +20,14 @@
 		"IFC":"eno2",
 		"NAMESPACE":"LOCAL"
 	},
+	"TMOB-USB": {
+		"IFC":"usb0",
+		"NAMESPACE":"TMOB-USB"
+	},
 	"PINGCOUNT":10,
 	"PINGINTERVAL":"1",
 	"CMUCLOUDLET":{
-		"IP":"128.2.208.222",
+		"IP":"128.2.208.222",	
 		"DN":"cloudlet004.elijah.cs.cmu.edu",
 		"IPERFPORT":"5201"
 	},
