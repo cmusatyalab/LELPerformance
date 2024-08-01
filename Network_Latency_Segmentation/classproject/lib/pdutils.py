@@ -8,9 +8,9 @@ import pytz
 
 
 ''' Data frame functions '''
-def dumpdf(df, rows=5):
+def dumpdf(df, head=5):
     print(df.shape)
-    print(df.head(rows))
+    print(df.head(head))
     print(df.dtypes)
 
 def getColumns(fn):
