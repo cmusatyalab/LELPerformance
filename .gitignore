@@ -2,3 +2,5 @@
 /.pydevproject
 processing/laptop_measure.log
 /.pydevproject.bak
+/Network_Measurement_Project/.ipynb_checkpoints
+/Network_Measurement_Project/Jupyter/.ipynb_checkpoints
