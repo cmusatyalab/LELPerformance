@@ -2,3 +2,4 @@
 /.pydevproject
 processing/laptop_measure.log
 /.pydevproject.bak
+*.pyc

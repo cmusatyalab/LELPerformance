@@ -28,16 +28,21 @@ LOGNAME=__name__
 
 def main():
     global logger
+    global cnf
+    global ifc_ip_map
     LOGFILE="network_study.log"
     logger = configureLogging(LOGNAME=LOGNAME,LOGFILE=LOGFILE,coloron=False)
+    cnf = cmdOptions(cnf)
     try:
         mconsole(f"Starting {__file__}")
         reverse = False
         if(cnf['USENAMESPACES']): 
             for NS in cnf['NETWORKS']: deleteNetworkNamespace(NS)
+        ifc_ip_map = getIfcIP()
         while True:
             reverse = False if reverse else True
             for NS in cnf['NETWORKS']:
+                IFC = cnf[NS]['IFC']
                 if(cnf['USENAMESPACES']): addNetworkNamespace(NS)
                 for DEST in cnf['DESTINATIONS']:
                     mconsole(f"TEST {DEST} over {NS}")
@@ -65,11 +70,12 @@ def runTestRound(dest, ns, port,reverse = False):
 def nping(dest, ns):
     ifc = ns['IFC']
     mconsole(f"Pinging {dest} via {ifc}")
-    if(cnf['USENAMESPACES']): pref=f"sudo ip netns exec {ns['NAMESPACE']}"
+    if(cnf['USENAMESPACES']): 
+        pref=f"echo '{cnf['sudopw']}' |sudo -S ip netns exec {ns['NAMESPACE']}"
     else: pref=""
     # pref=""
     cmd = f"{pref} {cnf['PINGPATH']} -I {ifc} -c {cnf['PINGCOUNT']} -i {cnf['PINGINTERVAL']} {dest}"
-    result = cmd_all(cmd)
+    result = cmd_all_pipe(cmd)
     console_stderr(result)
     tdfx = parsePing(result)
     tdfx['DEST'] = dest
@@ -177,38 +183,49 @@ def saveDF(pdf,idf,tdf):
     pass
     
 ''' Utilities '''
-def getIfcIP(ifc):
-    rec = re.compile(" \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
-    cmd = "ip a"
+def getIfcIP(verbose=True):
+    ipdict={}
+    rec1 = re.compile(" \d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}")
+    rec2 = re.compile("[^\s]+")
+    cmd = "ip --brief a"
     ip = None
     res = cmd_all(cmd)
-    try:
-        for ii,line in enumerate(res['stdout']):
-            if ifc in line:
-                ifcline = line
-                ipline = res['stdout'][ii+2]
-                ip = rec.findall(ipline)[0]
-                break;
-    except:
-        mconsole("Could not get interface IP",level=ERROR)
-    return ip
+    for ii,line in enumerate(res['stdout']):
+        try:
+                ip = rec1.findall(line)[0]
+                ifc = rec2.findall(line)[0]
+                ipdict[ifc] = ip.strip()
+        except:
+            mconsole(f"Could not get interface IP from {line}",level="ERROR")
+    if verbose:
+        for key in ipdict.keys():
+            mconsole(f"interface={key} IP={ipdict[key]}")
+    return ipdict
 
 def addNetworkNamespace(ns):
     if isNetworkNamespace(ns): return
-    tns = ns
-    cmd=f"sudo bash ./add_network_namespace.sh {tns}"
-    result = cmd_all(cmd)
+    NS = cnf[ns]
+    ifc = NS['IFC']
+    ip = ifc_ip_map[ifc]
+    cmd=f"echo '{cnf['sudopw']}' | sudo -S bash ./add_network_namespace.sh {ns} {ifc} {ip}"
+    result = cmd_all_pipe(cmd)
+    console_stdout(result)
     console_stderr(result)
     isNetworkNamespace(ns)
-    pref=f"sudo ip netns exec {tns}"
+    pref=f"sudo ip netns exec {ns}"
     cmd = f"{pref} ip a"
     result = cmd_all(cmd)
     console_stdout(result)
 
 def deleteNetworkNamespace(ns):
-    if not isNetworkNamespace(ns): return
-    cmd=f"sudo bash -c 'bash ./del_network_namespace.sh {ns} && sudo netplan apply'"
-    result = cmd_all(cmd)
+    if not isNetworkNamespace(ns):
+        mconsole(f"Network namespace {ns} does not exist") 
+        return
+    NS = cnf[ns]
+    ifc = NS['IFC']
+    # ip = ifc_ip_map[ifc]
+    cmd=f"echo '{cnf['sudopw']}' | sudo -S bash -c 'bash ./del_network_namespace.sh {ns} {ifc} && sudo netplan apply'"
+    result = cmd_all_pipe(cmd)
     console_stderr(result)
     
 def isNetworkNamespace(ns):
@@ -221,9 +238,41 @@ def isNetworkNamespace(ns):
     for line in results['stdout']:
         if rec.match(line): return True
     return retbool
-    
-def console_stdout(res):  devnull=[mconsole(f"{line}") for line in res['stdout']]
-def console_stderr(res):  devnull=[mconsole(f"{line}",level="ERROR") for line in res['stderr']]
+
+def cmdOptions(tmpcnf):
+    parser = OptionParser(usage="usage: %prog [options]")
+    parser.add_option("-d", "--debug",
+                  action="store_true", dest="debug", default=False,
+                  help="Debugging mode")
+    parser.add_option("-S", "--sudopw", dest="sudopw", default = None,
+        help="Allow sudo commands", metavar="STRING")
+    (options,_) = parser.parse_args()
+    tmpcnf.update(options.__dict__.copy())
+    return  tmpcnf
+
+def cmd_all_pipe(cmdstr,output=False):
+    ps = subprocess.Popen(cmdstr,shell=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    outp = ps.communicate()
+    if outp[0] is not None:
+        stdout = outp[0].decode('utf-8').split('\n')
+        stdout = [line for line in stdout if line != ""]
+    else:
+        stdout = []
+    if outp[1] is not None:
+        stderr = outp[1].decode('utf-8').split('\n')    
+        stderr = [line for line in stderr if line != ""]
+    else:
+        stderr = []
+
+    if output:
+        print("STDOUT")
+        prtlines(stdout)
+        print("STDERR")
+        prtlines(stderr)
+    return {'stdout':stdout,'stderr':stderr }
+
+def console_stdout(res):  devnull=[mconsole(f"{line}") for line in res['stdout'] if line != ""]
+def console_stderr(res):  devnull=[mconsole(f"{line}",level="ERROR") for line in res['stderr'] if line != ""]
 
 ''' Graveyard '''
 
