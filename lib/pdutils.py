@@ -7,9 +7,9 @@ import time, datetime
 import pandas as pd
 
 ''' Data frame functions '''
-def dumpdf(df):
+def dumpdf(df,head=5):
     print(df.shape)
-    print(df.head(5))
+    print(df.head(head))
     print(df.dtypes)
 
 def getColumns(fn):

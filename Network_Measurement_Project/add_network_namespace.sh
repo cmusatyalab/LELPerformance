@@ -2,8 +2,11 @@
 test -z "$1" && NS="LOCAL" || NS="$1"
 test -z "$2" && IFC="eno2" || IFC="$2"
 test -z "$3" && IP="128.2.208.222"  || IP="$3"
+test -z "$4" && GW="128.2.208.1"  || GW="$4"
+
 IPMTCHR='((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'
 GW=$(ip r|grep $IP|grep -oE "default via $IPMTCHR"|sed 's/default via //')
+GW=$4
 
 echo Adding NS=$NS IFC=$IFC IP=$IP GW=$GW
 # GW=$IP
