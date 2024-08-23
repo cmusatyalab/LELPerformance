@@ -41,17 +41,18 @@ def main():
         reverse = False
         deleteAllNetworkNamespaces()
         ifc_ip_map,gw_ip_map = getIfcIP()
+        addAllNetworkNamespaces()
         while True:
             reverse = False if reverse else True
             for NS in cnf['NETWORKS']:
                 IFC = cnf[NS]['IFC']
-                if(cnf['USENAMESPACES']): addNetworkNamespace(NS)
+                # if(cnf['USENAMESPACES']): addNetworkNamespace(NS)
                 for DEST in cnf['DESTINATIONS']:
                     mconsole(f"TEST {DEST} over {NS}")
                     pingdf, iperfdf,tracertdf= runTestRound(cnf[DEST]['IP'],cnf[NS],cnf[DEST]['IPERFPORT'], reverse = reverse)
                     saveDF(pingdf, iperfdf,tracertdf)
                     pass
-                deleteAllNetworkNamespaces()
+                # deleteAllNetworkNamespaces()
             mconsole(f"Sleeping for {cnf['SLEEPTIME']} minutes")
             time.sleep(cnf['SLEEPTIME']*60)
     except KeyboardInterrupt:
@@ -231,6 +232,7 @@ def getIfcIP():
 
 def addNetworkNamespace(ns):
     if isNetworkNamespace(ns): return
+    mconsole(f"Adding network namespace {ns}")
     NS = cnf[ns]
     ifc = NS['IFC']
     ip = ifc_ip_map[ifc]
@@ -246,6 +248,10 @@ def addNetworkNamespace(ns):
         result = cmd_all(cmd)
         console_stdout(result)
     # getActiveNetworkNamespaces()
+    
+def addAllNetworkNamespaces():
+    for NS in cnf['NETWORKS']: 
+        addNetworkNamespace(NS)
 
 def deleteNetworkNamespace(ns):
     if not isNetworkNamespace(ns):
