@@ -2,7 +2,6 @@
 import os
 import sys
 import platform
-from debugpy._vendored.pydevd._pydev_bundle.pydev_log import verbose
 # print(sys.path)
 sys.path.append("../lib")
 import subprocess
