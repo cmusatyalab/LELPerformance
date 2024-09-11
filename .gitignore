@@ -1,6 +1,10 @@
 /.project
 /.pydevproject
+*.png
+*.log
 processing/laptop_measure.log
 /.pydevproject.bak
 /Network_Measurement_Project/.ipynb_checkpoints
 /Network_Measurement_Project/Jupyter/.ipynb_checkpoints
+Network_Measurement_Project/Jupyter/tmp-5g-cbrs.csv
+Network_Measurement_Project/Jupyter/tmp.csv
