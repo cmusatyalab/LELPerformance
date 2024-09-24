@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://earth.google.com/kml/2.1"><Folder>
+<Placemark><name>-91 5G</name><ExtendedData><Data name="TECHNOLOGY"><value>5G</value></Data><Data name="RSRP"><value>-91 dBm</value></Data><Data name="SPEED"><value>3 km/h</value></Data><Data name="ALTITUDE"><value>195m</value></Data><Data name="TIME"><value>2024.09.18_10.39.42</value></Data><Data name="OPERATOR"><value>314737</value></Data></ExtendedData><Style><LabelStyle><scale>0.7</scale></LabelStyle><IconStyle><color>FFF07800</color><scale>0.982716049382716</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon></IconStyle></Style><Point><coordinates>-79.94860467,40.414949,0</coordinates></Point></Placemark>
+</Folder></kml>

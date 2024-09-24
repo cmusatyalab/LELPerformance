@@ -30,8 +30,10 @@ FILEMERGING = False
 FILEREPORTING = False
 TMP = True
 
-OUTPUT_FILENAME = "MergedOutput.kml"
-TOUTPUT_FILENAME = "MergedOutput.csv"
+OUTPUT_FILENAME = "MadeOutput.kml"
+TOUTPUT_FILENAME = "MadeOutput.csv"
+KMLTEMPLATEFN = "kmltemplate.kml"
+DFTEMPLATEFN = "pdtemplate.csv"
 NAMESPACE = "http://earth.google.com/kml/2.1"
 cnf = initConfig()
 LOGNAME=__name__
@@ -51,108 +53,73 @@ def main():
     for DIR in DIRCHECKLIST:
         mconsole(f"{DIR} exists") if os.path.isdir(DIR) else print(f"{DIR} does not exist")
     
-    kmltask = kwargs['kmltask']
-    kmlc = KMLCombiner()
-    kmlc.findFiles(EXPDIR)
-    # kmlc.combine(ftype = 'kml')
-    # kmlc.combine(ftype = 'txt')
-    kmlc.combine(ftype = 'merge')
-    kmlc.filter(filterin = True)
-    kmlc.removeNoSignal()
-    kmlc.rescale(original="0.3",new="0.7",style="IconStyle")
-    kmlc.rescale(original="0.0",new="0.7",style="LabelStyle")
-    kmlc.inflate()
-    kmlc.writeKMLFile()
+    # kmltask = kwargs['kmltask']
+    kmltask = 'test'
+    if kmltask == 'test':
+        kmlm = KMLMaker()
 
+ 
     
-class KMLCombiner(object):
+class KMLMaker(object):
     def __init__(self):
-        self.fnames = None
-        self.kresult = None
-        self.tresult = None
-        self.txtdf = None
-        self.rxlevdf = None
+        with open(KMLTEMPLATEFN, "r") as f:
+            lines = f.readlines()
+        self.kmlheader = lines[0]
+        self.kmlnamespace = lines[1]
+        self.kmlend = lines[3]
+        self.templatedata = xmltodict.parse('\n'.join(lines))
+        self.placemarktemplate = self.templatedata['kml']['Folder']['Placemark']
+        self.kmldataframe = None
+        pass
+        # assert len(filenames) > 0, 'No filenames!'
+        # self.fnames = filenames
+        # self.filesdata = [self.readFile(fn) for fn in filenames]
+        # self.result = None
+        # self.filesdf = None
+        # self.filesdict = None
+        # if filenames[0].endswith(".kml"):
+        #     self.type = 'kml'
+        #     self.filesdict = [xmltodict.parse('\n'.join(filedata)) for filedata in self.filesdata]
+        # elif filenames[0].endswith(".txt"):
+        #     self.type='txt'
     
-    def setFiles(self, filenames):  self.fnames = filenames
-        
-    def getFiles(self): return self.fnames
     
-    def findFiles(self,rootdir):
-        ''' Basic File Selection '''
-        ffnlst = walkDir(rootdir)
-        rxlevfiles =  [fn for fn in ffnlst if fn.endswith("rxlev.kml")]
-        rxlevfiles.sort()
-        tdfr = pd.DataFrame(rxlevfiles,columns=['FFN'])
-        tdfr['type'] = 'kml'
-        txtfiles =  [fn for fn in ffnlst if fn.endswith(".txt") ]
-        txtfiles.sort()
-        tdft = pd.DataFrame(txtfiles,columns=['FFN'])
-        tdft['type'] = 'txt'
-        
-        ''' File Reading and Parsing '''
-        # KML
-        tdfr['FILEDATA'] = tdfr.FFN.map(self.readFile)
-        tdfr['FILEDICT'] = tdfr.FILEDATA.map(self.parseXML)
-        # TXT
-        tdft['FILEDATA'] = tdft.FFN.map(self.readFile)
-        
-        ''' Saving as class variables '''
-        self.rxlevdf = tdfr.copy()
-        self.txtdf = tdft.copy()
-        self.fnames = rxlevfiles + txtfiles
+    def getFilesDict(self):
+        return self.filesdict
     
-    def combine(self,ftype ='merge'):
-        if ftype == 'merge' or ftype == "kml":
+    def getFilesDF(self):
+        return self.filesdf
+    
+    def combine(self):
+        if self.type == "kml":
             ''' Turn the kml files into dictionary '''
-            tdfr = self.rxlevdf.copy()
-            retdict = tdfr.FILEDICT.iloc[0]
-            retdict['kml']['Folder'] = tdfr.FILEDICT.iloc[1]['kml']['Folder']
-            mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
-            for kdict in tdfr.FILEDICT.iloc[2:]:
+            retdict = self.filesdict[0]
+            retdict['kml']['Folder'] = self.filesdict[1]['kml']['Folder']
+            mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
+            for kdict in self.filesdict[2:]:
                 retdict['kml']['Folder']['Placemark'] += kdict['kml']['Folder']['Placemark']
             mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
-            self.kresult = retdict
-            # return retdict
-        if ftype == 'merge' or ftype == "txt":
+            self.result = retdict
+            return retdict
+        elif self.type == "txt":
             ''' Turn the txt files into dataframe '''
             fdatalst = []
-            tdft = self.txtdf.copy()
-            columns = tdft.FILEDATA.iloc[0][0].strip("\n").split("\t")
-            tdfx = pd.DataFrame(columns = columns)
-            for fdata in list(tdft.FILEDATA):
-                sdata = [dline.strip("\n").split("\t") for dline in fdata[1:]]
-                tdfy = pd.DataFrame(sdata,columns = columns)
-                tdfx = pd.concat([tdfx, tdfy],axis=0)
-            self.tresult = tdfx.copy()
-        if ftype == 'merge':
-            newpmlst = []
-            kmldict = self.kresult
-            txtdf = self.tresult
-            for pm in kmldict['kml']['Folder']['Placemark']:
-                # if pm['ExtendedData'][style]['scale'] == original:
-                    ts = pm['ExtendedData']['Data'][4]['value']
-                    tdfx = txtdf[txtdf.Timestamp == ts]
-                    ''' Add operator from text file '''
-                    if len(tdfx) > 0:
-                        operator = tdfx.Operatorname.iloc[0]
-                    else:
-                        operator = "UNKNOWN"
-                    pm['ExtendedData']['Data'].append({'@name':'OPERATOR','value':operator})
-                    newpmlst.append(pm)
-            kmldict['kml']['Folder']['Placemark'] = newpmlst
-            self.kresult = kmldict
-   
-    def rescale(self,kmldict = None, original="0.3",new="0.7",style="IconStyle" ):
-        kmldict = kmldict if kmldict is not None else self.kresult 
+            columns = self.filesdata[0][0].strip("\n").split("\t")
+            for fdata in self.filesdata:
+                for line in fdata[1:]:
+                    fdatalst.append(line.strip("\n").split("\t"))
+            self.filesdf = pd.DataFrame(fdatalst, columns=columns)
+            return self.filesdf
+    
+    def rescale(self,kmldict, original="0.3",new="0.7",style="IconStyle" ):
         ''' Style can be IconStyle or LabelStyle '''
         for pm in kmldict['kml']['Folder']['Placemark']:
             if pm['Style'][style]['scale'] == original:
                 pm['Style'][style]['scale'] = new
-        self.kresult = kmldict
+        self.result = kmldict
         return kmldict
     
-    def inflate(self,kmldict = None, min=0.1, max=1.2,style="IconStyle" ):
-        kmldict = kmldict if kmldict is not None else self.kresult
+    def inflate(self,kmldict, min=0.1, max=1.2,style="IconStyle" ):
         ''' Style can be IconStyle '''
         style = 'IconStyle'
         threshold = 200
@@ -167,44 +134,39 @@ class KMLCombiner(object):
         scalelst = list(tdfx['scale'])
         for scale,pm in zip(scalelst, kmldict['kml']['Folder']['Placemark']):
             pm['Style'][style]['scale'] = scale
-        self.kresult = kmldict
+        self.result = kmldict
         return kmldict
 
-    def removeNoSignal(self,kmldict = None):
-        kmldict = kmldict if kmldict is not None else self.kresult
+    def removeNoSignal(self,kmldict):
         pmlst = kmldict['kml']['Folder']['Placemark']
         newpmlst = []
         for pm in pmlst:
             if not pm['name'].startswith("-200"): # No Signal
                 newpmlst.append(pm)
         kmldict['kml']['Folder']['Placemark'] = newpmlst
-        self.kresult = kmldict
+        self.result = kmldict
         return kmldict
     
-    def filter(self,kmldict = None, filtername = "OPERATOR", filtervalue = "314737", filterin = True):
-        kmldict = kmldict if kmldict is not None else self.kresult
+    def mergeKML_TXT(self,txtdf,filteroperator = None):
         # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
         newpmlst = []
+        kmldict = self.result
         for pm in kmldict['kml']['Folder']['Placemark']:
-            foundmatch = False
-            for edata in pm['ExtendedData']['Data']:
-                if edata['@name'] == filtername and edata['value'] == filtervalue:
-                    foundmatch = True
+            # if pm['ExtendedData'][style]['scale'] == original:
+                ts = pm['ExtendedData']['Data'][4]['value']
+                tdfx = txtdf[txtdf.Timestamp == ts]
+                if len(tdfx) > 0:
+                    operator = tdfx.Operatorname.iloc[0]
+                else:
+                    operator = "UNKNOWN"
+                if filteroperator is not None and operator != filteroperator:
                     continue
-            if filterin:
-                if foundmatch:               
-                    newpmlst.append(pm)
-            else:
-                if not foundmatch:
-                    newpmlst.append(pm)
+                pm['ExtendedData']['Data'].append({'@name':'OPERATOR','value':operator})
+                
+                newpmlst.append(pm)
         kmldict['kml']['Folder']['Placemark'] = newpmlst
-        self.kresult = kmldict
+        self.result = kmldict
         return kmldict
-    
-    ''' Map and Apply Methods '''
-   
-    def parseXML(self,filedata):
-        return xmltodict.parse('\n'.join(filedata))
 
     def readFile(self,fn,prepend = False):
         lines = []
@@ -215,12 +177,11 @@ class KMLCombiner(object):
             lines = [f"{fnlabel}\t{line}" for line in lines]
         return lines
 
-    def writeKMLFile(self,filedata=None,ftype = 'kml', filename = OUTPUT_FILENAME):
-        filedata = filedata if filedata is not None else self.kresult
-        if ftype == 'kml':
+    def writeKMLFile(self,filedata,filename = OUTPUT_FILENAME):
+        if self.type == 'kml':
             with open(filename, 'w') as f:
                     f.write(xmltodict.unparse(filedata))
-        elif ftype == 'txt':
+        elif self.type == 'txt':
             writejoin(filedata.set_index(filedata.columns[0],TOUUTPUT_FILENAME))
                 
 def cmdOptions(tmpcnf):
@@ -231,16 +192,15 @@ def cmdOptions(tmpcnf):
     parser.add_option("-T", "--kmltask",
                   dest="kmltask", default='fasttrack',
                   help="Specify which task to run ('fasttrack','filemerge','filereport'")
+    parser.add_option("-C", "--csvfile",
+                  dest="csvfile", 
+                  help="Path to csv file containing data for kmlfile")
     options,_ = parser.parse_args()
     tmpcnf.update(options.__dict__.copy())
     return  tmpcnf
 
 def console_stdout(res):  devnull=[mconsole(f"{line}") for line in res['stdout']]
 def console_stderr(res):  devnull=[mconsole(f"{line}",level="ERROR") for line in res['stderr']]
-
-
-
-
 
 ''' Graveyard '''
 
