@@ -110,7 +110,7 @@ class KMLCombiner(object):
             mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
             for kdict in tdfr.FILEDICT.iloc[2:]:
                 retdict['kml']['Folder']['Placemark'] += kdict['kml']['Folder']['Placemark']
-            mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
+            # mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
             self.kresult = retdict
             # return retdict
         if ftype == 'merge' or ftype == "txt":
