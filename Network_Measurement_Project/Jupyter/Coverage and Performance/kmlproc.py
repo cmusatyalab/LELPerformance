@@ -45,7 +45,7 @@ def main():
         DATADIR="/home/jblake1/Downloads/Network_Measurements"
     else:
         DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Images\\Coverage and Performance"
-        EXPDIR=os.path.join(*[DATADIR,"2024-09-18-Mill19-PTC-Coverage","LEL-UE1"])
+        EXPDIR=os.path.join(*[DATADIR,"2024-10-03-JMA-Testing","PXL4-UE1"])
     
     DIRCHECKLIST=[DATADIR,EXPDIR]
     for DIR in DIRCHECKLIST:
@@ -57,8 +57,8 @@ def main():
     # kmlc.combine(ftype = 'kml')
     # kmlc.combine(ftype = 'txt')
     kmlc.combine(ftype = 'merge')
-    kmlc.filter(filterin = True)
-    kmlc.removeNoSignal()
+    kmlc.filter(filterin = True, filtervalue="Living_Edge_Lab")
+    # kmlc.removeNoSignal()
     kmlc.rescale(original="0.3",new="0.7",style="IconStyle")
     kmlc.rescale(original="0.0",new="0.7",style="LabelStyle")
     kmlc.inflate()
@@ -84,7 +84,7 @@ class KMLCombiner(object):
         rxlevfiles.sort()
         tdfr = pd.DataFrame(rxlevfiles,columns=['FFN'])
         tdfr['type'] = 'kml'
-        txtfiles =  [fn for fn in ffnlst if fn.endswith(".txt") ]
+        txtfiles =  [fn for fn in ffnlst if fn.endswith(".txt") if "Screenshot" not in fn]
         txtfiles.sort()
         tdft = pd.DataFrame(txtfiles,columns=['FFN'])
         tdft['type'] = 'txt'
@@ -106,11 +106,12 @@ class KMLCombiner(object):
             ''' Turn the kml files into dictionary '''
             tdfr = self.rxlevdf.copy()
             retdict = tdfr.FILEDICT.iloc[0]
-            retdict['kml']['Folder'] = tdfr.FILEDICT.iloc[1]['kml']['Folder']
-            mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
-            for kdict in tdfr.FILEDICT.iloc[2:]:
-                retdict['kml']['Folder']['Placemark'] += kdict['kml']['Folder']['Placemark']
-            # mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
+            if len(tdfr) > 1:
+                retdict['kml']['Folder'] = tdfr.FILEDICT.iloc[1]['kml']['Folder']
+                mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
+                for kdict in tdfr.FILEDICT.iloc[2:]:
+                    retdict['kml']['Folder']['Placemark'] += kdict['kml']['Folder']['Placemark']
+                # mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
             self.kresult = retdict
             # return retdict
         if ftype == 'merge' or ftype == "txt":

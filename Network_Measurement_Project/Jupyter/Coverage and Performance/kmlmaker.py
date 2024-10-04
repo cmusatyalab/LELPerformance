@@ -47,22 +47,19 @@ def main():
         DATADIR="/home/jblake1/Downloads/Network_Measurements"
     else:
         DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Images\\Coverage and Performance"
-        EXPDIR=os.path.join(*[DATADIR,"2024-09-10-Mill19-Testing","LEL-UE1"])
+        EXPDIR=os.path.join(*[DATADIR,"2024-10-03-JMA-Testing","PXL4-UE1"])
     
     DIRCHECKLIST=[DATADIR,EXPDIR]
     for DIR in DIRCHECKLIST:
         mconsole(f"{DIR} exists") if os.path.isdir(DIR) else print(f"{DIR} does not exist")
     
     # kmltask = kwargs['kmltask']
+    indf = readjoin(EXPDIR,"JMA-2024-10-03-processed.csv")
     kmlm = KMLMaker()
-    kmlm.findFiles(EXPDIR)
-    kmlm.makeKML()
+    # kmlm.findFiles(EXPDIR)
+    kmlm.makeKML(indf)
     kmlm.writeKMLFile()
     pass
-    
-    
-
- 
     
 class KMLMaker(object):
     def __init__(self):
@@ -77,8 +74,6 @@ class KMLMaker(object):
         self.dfc = None
         self.kresult = None
 
-    
-    
     def findFiles(self,rootdir):
         ''' Basic File Selection '''
         ffnlst = walkDir(rootdir)
@@ -94,19 +89,34 @@ class KMLMaker(object):
         kmltmp = self.templatedata.copy()
         tdfc = tdfc.FILEDATA.iloc[0]
         tdfc = tdfc.dropna(subset=['LONGITUDE','LATITUDE'])
-        pmdf = tdfc[:].apply(self.makePM,axis =1)
+        pmdf = tdfc.apply(self.makePM,axis =1)
+        kmltmp['kml']['Folder']['Placemark'] = list(pmdf)
+        self.kresult = kmltmp.copy()
+        
+    def makeKML(self,indf,lng="LONGITUDE",lat="LATITUDE"):
+        tdfc = indf.copy()
+        tdfc = tdfc.dropna(subset=[lng,lat])
+        kmltmp = self.templatedata.copy()
+        pmdf = tdfc.apply(self.makePM,axis =1)
         kmltmp['kml']['Folder']['Placemark'] = list(pmdf)
         self.kresult = kmltmp.copy()
         
     def makePM(self,row):
+        collst = ['RSRP','PTMEAN','PTMIN','PTMAX','PTSD','PSLOSS','SNR','DOWNLOAD','UPLOAD','CELLID','LONGITUDE','LATITUDE']
+        rowlst = list(row.index)
+        iterlst = [col for col in collst if col in rowlst]
         pmtmp = self.placemarktemplate.copy()
-        pmtmp = self.updatePMData(pmtmp,"name",f"{row.RSRP} dBm")
-        pmtmp = self.updatePMData(pmtmp,"RSRP",f"{row.RSRP}")
-        pmtmp = self.updatePMData(pmtmp,"PINGTIME",f"{row.PTMEAN}")
-        pmtmp = self.updatePMData(pmtmp,"coordinates",f"{row.LONGITUDE}, {row.LATITUDE}, 0")
+        for col in iterlst:
+            if np.isnan(row[col]):
+                continue 
+            if col == "PTMEAN":
+                pmtmp = self.updatePMData(pmtmp,"name",f"{row[col]} ms")
+            elif col == "LONGITUDE" or col == "LATITUDE":
+                pmtmp = self.updatePMData(pmtmp,"coordinates",f"{row.LONGITUDE}, {row.LATITUDE}, 0")
+                continue
+            pmtmp = self.updatePMData(pmtmp,col,f"{row[col]}")
         pmtmp = self.removePMTBData(pmtmp)
-        print(pmtmp)
-        retpm = json.loads(json.dumps(pmtmp))
+        retpm = json.loads(json.dumps(pmtmp)) # Strange way to remove obscure call by reference issues
         return retpm
     
     def updatePMData(self,pmin,name,value):
@@ -115,13 +125,14 @@ class KMLMaker(object):
             pm['name'] = value
         elif name == "coordinates":
             pm['Point']['coordinates'] = value
-            print(f"{pm['Point']['coordinates']}")
         else:
             namelst = [item['@name'] for item in pm['ExtendedData']['Data']]
             if name in namelst:
                 for ii,pmname in enumerate(namelst):
                     if pmname == name:
                         pm['ExtendedData']['Data'][ii]['value'] = value
+            else:
+                pm['ExtendedData']['Data'].append({"@name":name,"value":value})
         return pm
     
     def removePMTBData(self,pm):
