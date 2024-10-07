@@ -45,24 +45,31 @@ def main():
         DATADIR="/home/jblake1/Downloads/Network_Measurements"
     else:
         DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Images\\Coverage and Performance"
-        EXPDIR=os.path.join(*[DATADIR,"2024-10-03-JMA-Testing","PXL4-UE1"])
-    
+        EXPDIR=os.path.join(*[DATADIR,"2024-10-04-JMA-Testing","LEL-UE1"])
+        filename = 'MadeOutput' + "_".join(EXPDIR.split("\\")[-2:]) + '.kml'
     DIRCHECKLIST=[DATADIR,EXPDIR]
     for DIR in DIRCHECKLIST:
         mconsole(f"{DIR} exists") if os.path.isdir(DIR) else print(f"{DIR} does not exist")
-    
-    kmltask = kwargs['kmltask']
-    kmlc = KMLCombiner()
-    kmlc.findFiles(EXPDIR)
-    # kmlc.combine(ftype = 'kml')
-    # kmlc.combine(ftype = 'txt')
-    kmlc.combine(ftype = 'merge')
-    kmlc.filter(filterin = True, filtervalue="Living_Edge_Lab")
-    # kmlc.removeNoSignal()
-    kmlc.rescale(original="0.3",new="0.7",style="IconStyle")
-    kmlc.rescale(original="0.0",new="0.7",style="LabelStyle")
-    kmlc.inflate()
-    kmlc.writeKMLFile()
+    kc = KMLCombiner()
+    # kc.setFiles(rxlevfiles)
+    kc.findFiles(EXPDIR)
+    kc.combine(ftype='merge')
+    kc.inflate()
+    kc.labelsOn()
+    kc.filter(filterin = True, filtervalue="Living_Edge_Lab")
+    kc.writeKMLFile(filename=filename)
+    # kmltask = kwargs['kmltask']
+    # kmlc = KMLCombiner()
+    # kmlc.findFiles(EXPDIR)
+    # # kmlc.combine(ftype = 'kml')
+    # # kmlc.combine(ftype = 'txt')
+    # kmlc.combine(ftype = 'merge')
+    # kmlc.filter(filterin = True, filtervalue="Living_Edge_Lab")
+    # # kmlc.removeNoSignal()
+    # kmlc.rescale(original="0.3",new="0.7",style="IconStyle")
+    # kmlc.rescale(original="0.0",new="0.7",style="LabelStyle")
+    # kmlc.inflate()
+    # kmlc.writeKMLFile(filename="MadeOutput_2024-10-03.kml")
 
     
 class KMLCombiner(object):
@@ -107,11 +114,10 @@ class KMLCombiner(object):
             tdfr = self.rxlevdf.copy()
             retdict = tdfr.FILEDICT.iloc[0]
             if len(tdfr) > 1:
-                retdict['kml']['Folder'] = tdfr.FILEDICT.iloc[1]['kml']['Folder']
-                mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
-                for kdict in tdfr.FILEDICT.iloc[2:]:
+                for kdict in tdfr.FILEDICT.iloc[1:]:
                     retdict['kml']['Folder']['Placemark'] += kdict['kml']['Folder']['Placemark']
                 # mconsole(f"{len(retdict['kml']['Folder']['Placemark'])}")
+                mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
             self.kresult = retdict
             # return retdict
         if ftype == 'merge' or ftype == "txt":
@@ -122,8 +128,11 @@ class KMLCombiner(object):
             tdfx = pd.DataFrame(columns = columns)
             for fdata in list(tdft.FILEDATA):
                 sdata = [dline.strip("\n").split("\t") for dline in fdata[1:]]
-                tdfy = pd.DataFrame(sdata,columns = columns)
-                tdfx = pd.concat([tdfx, tdfy],axis=0)
+                try:
+                    tdfy = pd.DataFrame(sdata,columns = columns)
+                    tdfx = pd.concat([tdfx, tdfy],axis=0)
+                except:
+                    continue
             self.tresult = tdfx.copy()
         if ftype == 'merge':
             newpmlst = []
@@ -170,6 +179,9 @@ class KMLCombiner(object):
             pm['Style'][style]['scale'] = scale
         self.kresult = kmldict
         return kmldict
+    
+    def labelsOn(self):
+        self.rescale(original="0.0",new="0.7",style="LabelStyle")
 
     def removeNoSignal(self,kmldict = None):
         kmldict = kmldict if kmldict is not None else self.kresult
@@ -202,6 +214,21 @@ class KMLCombiner(object):
         self.kresult = kmldict
         return kmldict
     
+    def getDataKeyValue(self,key,kmldict=None):
+        kmldict = kmldict if kmldict is not None else self.kresult
+        # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
+        matchlst = []
+        for pm in kmldict['kml']['Folder']['Placemark']:
+            foundmatch = False
+            for edata in pm['ExtendedData']['Data']:
+                if edata['@name'] == key:
+                    foundmatch = True
+                    continue
+                if foundmatch:               
+                    matchlst.append(edata['value'])
+                if not foundmatch:
+                    matchlst.append(None)
+        return pd.DataFrame(matchlst)
     ''' Map and Apply Methods '''
    
     def parseXML(self,filedata):
