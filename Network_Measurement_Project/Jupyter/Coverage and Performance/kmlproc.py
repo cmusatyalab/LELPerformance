@@ -214,6 +214,16 @@ class KMLCombiner(object):
         self.kresult = kmldict
         return kmldict
     
+    def replaceExtendedData(self,extdatalst,kmldict = None):
+        kmldict = kmldict if kmldict is not None else self.kresult
+        newpmlst = []
+        for ii, pm in enumerate(kmldict['kml']['Folder']['Placemark']):
+            pm['ExtendedData']['Data'] = extdatalst[ii]
+            newpmlst.append(pm)
+        kmldict['kml']['Folder']['Placemark'] = newpmlst
+        self.kresult = kmldict
+        return kmldict
+    
     def getDataKeyValue(self,key,kmldict=None):
         kmldict = kmldict if kmldict is not None else self.kresult
         # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
@@ -231,6 +241,9 @@ class KMLCombiner(object):
         return pd.DataFrame(matchlst)
     ''' Map and Apply Methods '''
    
+
+        
+        
     def parseXML(self,filedata):
         return xmltodict.parse('\n'.join(filedata))
 
