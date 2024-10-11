@@ -28,6 +28,7 @@ from config import *
 
 FILEMERGING = False
 FILEREPORTING = False
+PRO=True
 TMP = True
 
 OUTPUT_FILENAME = "MergedOutput.kml"
@@ -44,8 +45,8 @@ def main():
     if sys.platform == "linux":
         DATADIR="/home/jblake1/Downloads/Network_Measurements"
     else:
-        DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Images\\Coverage and Performance"
-        EXPDIR=os.path.join(*[DATADIR,"2024-10-04-JMA-Testing","LEL-UE1"])
+        DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Coverage and Performance"
+        EXPDIR=os.path.join(*[DATADIR,"2024-10-10-Mill19-Testing","LEL-UE1"])
         filename = 'MadeOutput' + "_".join(EXPDIR.split("\\")[-2:]) + '.kml'
     DIRCHECKLIST=[DATADIR,EXPDIR]
     for DIR in DIRCHECKLIST:
@@ -56,7 +57,8 @@ def main():
     kc.combine(ftype='merge')
     kc.inflate()
     kc.labelsOn()
-    kc.filter(filterin = True, filtervalue="Living_Edge_Lab")
+    kc.filter(filterin = True, filtervalue="314737")
+    kc.filter(filterin = True, filtername="PHONE STATE", filtervalue="D")
     kc.writeKMLFile(filename=filename)
     # kmltask = kwargs['kmltask']
     # kmlc = KMLCombiner()
@@ -79,6 +81,7 @@ class KMLCombiner(object):
         self.tresult = None
         self.txtdf = None
         self.rxlevdf = None
+        self.PRO = PRO
     
     def setFiles(self, filenames):  self.fnames = filenames
         
@@ -128,6 +131,8 @@ class KMLCombiner(object):
             tdfx = pd.DataFrame(columns = columns)
             for fdata in list(tdft.FILEDATA):
                 sdata = [dline.strip("\n").split("\t") for dline in fdata[1:]]
+                for ii,srow in enumerate(sdata):
+                    sdata[ii] = srow + ["" for jj in range(0,len(columns) - len(srow))] # Pad
                 try:
                     tdfy = pd.DataFrame(sdata,columns = columns)
                     tdfx = pd.concat([tdfx, tdfy],axis=0)
@@ -138,14 +143,20 @@ class KMLCombiner(object):
             newpmlst = []
             kmldict = self.kresult
             txtdf = self.tresult
+            pm0 = kmldict['kml']['Folder']['Placemark'][0]['ExtendedData']['Data']
+            eddict = {dd['@name']:ii for ii,dd in enumerate(pm0)}
+            tsindex = eddict['TIME']
             for pm in kmldict['kml']['Folder']['Placemark']:
                 # if pm['ExtendedData'][style]['scale'] == original:
-                    ts = pm['ExtendedData']['Data'][4]['value']
-                    tdfx = txtdf[txtdf.Timestamp == ts]
-                    ''' Add operator from text file '''
-                    if len(tdfx) > 0:
-                        operator = tdfx.Operatorname.iloc[0]
-                    else:
+                    try:
+                        ts = pm['ExtendedData']['Data'][tsindex]['value']
+                        tdfx = txtdf[txtdf.Timestamp == ts]
+                        ''' Add operator from text file '''
+                        if len(tdfx) > 0:
+                            operator = tdfx.Operatorname.iloc[0]
+                        else:
+                            operator = "UNKNOWN"
+                    except:
                         operator = "UNKNOWN"
                     pm['ExtendedData']['Data'].append({'@name':'OPERATOR','value':operator})
                     newpmlst.append(pm)
@@ -161,16 +172,15 @@ class KMLCombiner(object):
         self.kresult = kmldict
         return kmldict
     
-    def inflate(self,kmldict = None, min=0.1, max=1.2,style="IconStyle" ):
+    def inflate(self,key = "RSRP",type=int, kmldict = None, min=0.1, max=1.2,style="IconStyle" ):
         kmldict = kmldict if kmldict is not None else self.kresult
         ''' Style can be IconStyle '''
         style = 'IconStyle'
         threshold = 200
         siglevlst = []
-        for pm in kmldict['kml']['Folder']['Placemark']:
-            siglevlst.append([pm['ExtendedData']['Data'][1]['@name'], pm['ExtendedData']['Data'][1]['value']])
-        tdfx = pd.DataFrame(siglevlst, columns = ['name','value'])
-        tdfx['fvalue'] = tdfx.value.map(lambda xx: int(xx.replace("-","").replace(" dBm","")))
+        tdfx = self.getDataKeyValue(key,kmldict=kmldict)
+        tdfx['fvalue'] = tdfx[key].map(lambda xx: int(xx.replace("-","").replace(" dBm","")) 
+                                        if xx is not None else xx)
         tdfx['fnorm'] = (tdfx.fvalue - tdfx.fvalue.min())/(tdfx.fvalue.max() - tdfx.fvalue.min())
         tdfx['fscale'] = (1 - tdfx.fnorm) * (max-min) + min
         tdfx['scale'] = tdfx.fscale.map(lambda xx: str(xx))
@@ -224,6 +234,20 @@ class KMLCombiner(object):
         self.kresult = kmldict
         return kmldict
     
+    def addDataKeyValue(self,row,inkey=None):
+        val = row[inkey]
+        # print(row.ExtendedData)
+        # print(val)
+        exists = False
+        for ii,item in enumerate(row.ExtendedData['Data']):
+            if item['@name'] == inkey:
+                row.ExtendedData['Data'][ii]['value'] = val
+                exists = True
+        if not exists:
+            row.ExtendedData['Data'].append({'@name':inkey,'value':val})
+        # print(row.ExtendedData)
+        return row
+    
     def getDataKeyValue(self,key,kmldict=None):
         kmldict = kmldict if kmldict is not None else self.kresult
         # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
@@ -233,19 +257,22 @@ class KMLCombiner(object):
             for edata in pm['ExtendedData']['Data']:
                 if edata['@name'] == key:
                     foundmatch = True
-                    continue
-                if foundmatch:               
                     matchlst.append(edata['value'])
-                if not foundmatch:
-                    matchlst.append(None)
-        return pd.DataFrame(matchlst)
+                    continue                   
+            if not foundmatch:
+                matchlst.append(None)
+        return pd.DataFrame(matchlst,columns=[key])
     ''' Map and Apply Methods '''
    
 
         
         
     def parseXML(self,filedata):
-        return xmltodict.parse('\n'.join(filedata))
+        fd = '\n'.join(filedata)
+        if not fd.endswith("</Folder></kml>"):
+            mconsole("File not properly closed")
+            fd += "</Folder></kml>"
+        return xmltodict.parse(fd)
 
     def readFile(self,fn,prepend = False):
         lines = []
