@@ -18,6 +18,7 @@ from gputils import *
 from iputils import *
 import xmltodict
 import re
+import itertools
 
 
 from optparse import OptionParser
@@ -59,6 +60,7 @@ def main():
     kc.labelsOn()
     kc.filter(filterin = True, filtervalue="314737")
     kc.filter(filterin = True, filtername="PHONE STATE", filtervalue="D")
+    tdfx = kc.kmlToDF(filename="tmp.csv")
     kc.writeKMLFile(filename=filename)
     # kmltask = kwargs['kmltask']
     # kmlc = KMLCombiner()
@@ -163,18 +165,20 @@ class KMLCombiner(object):
             kmldict['kml']['Folder']['Placemark'] = newpmlst
             self.kresult = kmldict
    
-    def rescale(self,kmldict = None, original="0.3",new="0.7",style="IconStyle" ):
+    def rescale(self,kmldict = None, original="0.3",new="0.7",style="IconStyle", force = False ):
+        ''' Changes the size of the icon from original to new. If force is true, set all to new '''
         kmldict = kmldict if kmldict is not None else self.kresult 
         ''' Style can be IconStyle or LabelStyle '''
         for pm in kmldict['kml']['Folder']['Placemark']:
-            if pm['Style'][style]['scale'] == original:
+            if force or pm['Style'][style]['scale'] == original:
                 pm['Style'][style]['scale'] = new
         self.kresult = kmldict
         return kmldict
     
     def inflate(self,key = "RSRP",type=int, kmldict = None, min=0.1, max=1.2,style="IconStyle" ):
+        ''' Changes the size of the icon based on value of the key '''
         kmldict = kmldict if kmldict is not None else self.kresult
-        ''' Style can be IconStyle '''
+        ''' Style must be IconStyle '''
         style = 'IconStyle'
         threshold = 200
         siglevlst = []
@@ -194,6 +198,7 @@ class KMLCombiner(object):
         self.rescale(original="0.0",new="0.7",style="LabelStyle")
 
     def removeNoSignal(self,kmldict = None):
+        ''' Filters out Placemarks if the name starts with -200 (no signal) '''
         kmldict = kmldict if kmldict is not None else self.kresult
         pmlst = kmldict['kml']['Folder']['Placemark']
         newpmlst = []
@@ -205,8 +210,8 @@ class KMLCombiner(object):
         return kmldict
     
     def filter(self,kmldict = None, filtername = "OPERATOR", filtervalue = "314737", filterin = True):
+        ''' Filters the Placemark based on ExtendedData/Data @name and value; filterin picks between keeping or dropping '''
         kmldict = kmldict if kmldict is not None else self.kresult
-        # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
         newpmlst = []
         for pm in kmldict['kml']['Folder']['Placemark']:
             foundmatch = False
@@ -216,7 +221,7 @@ class KMLCombiner(object):
                     continue
             if filterin:
                 if foundmatch:               
-                    newpmlst.append(pm)
+                   newpmlst.append(pm)
             else:
                 if not foundmatch:
                     newpmlst.append(pm)
@@ -225,6 +230,7 @@ class KMLCombiner(object):
         return kmldict
     
     def replaceExtendedData(self,extdatalst,kmldict = None):
+        ''' Replaces the ExtendedData dictionaries with the contents of extdatalst '''
         kmldict = kmldict if kmldict is not None else self.kresult
         newpmlst = []
         for ii, pm in enumerate(kmldict['kml']['Folder']['Placemark']):
@@ -233,22 +239,9 @@ class KMLCombiner(object):
         kmldict['kml']['Folder']['Placemark'] = newpmlst
         self.kresult = kmldict
         return kmldict
-    
-    def addDataKeyValue(self,row,inkey=None):
-        val = row[inkey]
-        # print(row.ExtendedData)
-        # print(val)
-        exists = False
-        for ii,item in enumerate(row.ExtendedData['Data']):
-            if item['@name'] == inkey:
-                row.ExtendedData['Data'][ii]['value'] = val
-                exists = True
-        if not exists:
-            row.ExtendedData['Data'].append({'@name':inkey,'value':val})
-        # print(row.ExtendedData)
-        return row
-    
+
     def getDataKeyValue(self,key,kmldict=None):
+        ''' Returns 1-column DataFrame with the values for the key '''
         kmldict = kmldict if kmldict is not None else self.kresult
         # self.result['kml']['Folder']['Placemark'][0]['ExtendedData']['Data'].append({'@name':'OPERATOR','value':'314737'})
         matchlst = []
@@ -262,18 +255,73 @@ class KMLCombiner(object):
             if not foundmatch:
                 matchlst.append(None)
         return pd.DataFrame(matchlst,columns=[key])
-    ''' Map and Apply Methods '''
-   
+    
+    def getDataKeyValueDF(self,key,extralst):
+        for edata in extralst['Data']:
+            if edata['@name'] == key:
+                return edata['value']
+        return None
+    ''' KML to DF Utilities '''
+    def kmlToDF(self, kmldict = None,filename=None):
+        kmldict = kmldict if kmldict is not None else self.kresult
+        fdf = pd.DataFrame(kmldict['kml']['Folder']['Placemark'])
+        fdf = self.getEDataFields(fdf)
+        fdf = self.getStyleFields(fdf)
+        fdf = self.getStyleFields(fdf)
+        fdf = self.getCoordinates(fdf)
+        fdf = drp_lst(fdf,['ExtendedData','Style','Point'])
+        if filename is not None:
+            writejoin(fdf.set_index('TIME'),"",filename)
+        return fdf
+    
+    def getEDataFields(self,fdf):
+        retdf = fdf.copy()
+        edatadf = fdf.ExtendedData.map(lambda xx: xx['Data'])
+        fielddf = edatadf.map(lambda xx: [subdict['@name'] for subdict in xx])
+        flst = list(set(itertools.chain.from_iterable(list(fielddf))))
+        for fld in flst:
+           retdf[fld] = retdf.ExtendedData.map(lambda xx: self.getDataKeyValueDF(fld,xx))
+        return retdf
 
-        
-        
+    def getStyleFields(self, fdf):
+        retdf = fdf.copy()
+        retdf['LabelScale'] = fdf.Style.map(lambda xx: xx['LabelStyle']['scale'])
+        retdf['IconScale'] = fdf.Style.map(lambda xx: xx['IconStyle']['scale'])
+        retdf['IconColor'] = fdf.Style.map(lambda xx: xx['IconStyle']['color'])
+        retdf['Icon'] = fdf.Style.map(lambda xx: xx['IconStyle']['Icon']['href'])
+        return retdf
+    
+    def getCoordinates(self, fdf):
+        retdf = fdf.copy()
+        retdf[['Latitude','Longitude','Elevation']] = retdf.apply(lambda xx: xx.Point['coordinates'].split(","),  axis=1, result_type="expand")
+        return retdf
+    
+    ''' Map and Apply Methods '''
     def parseXML(self,filedata):
+        ''' Parse the KML Data into XML Dictionary '''
         fd = '\n'.join(filedata)
         if not fd.endswith("</Folder></kml>"):
             mconsole("File not properly closed")
             fd += "</Folder></kml>"
         return xmltodict.parse(fd)
+    
+    def addDataKeyValue(self,row,inkey=None):
+        ''' Returns row (e.g., from apply) function with the value in the 
+            inkey column inserted in the ExtendedData dictionary '''
+        val = row[inkey]
+        # print(row.ExtendedData)
+        # print(val)
+        exists = False
+        for ii,item in enumerate(row.ExtendedData['Data']):
+            if item['@name'] == inkey:
+                row.ExtendedData['Data'][ii]['value'] = val
+                exists = True
+        if not exists:
+            row.ExtendedData['Data'].append({'@name':inkey,'value':val})
+        # print(row.ExtendedData)
+        return row
 
+    ''' General Methods '''
     def readFile(self,fn,prepend = False):
         lines = []
         with open(fn,"r") as f:
@@ -306,30 +354,6 @@ def cmdOptions(tmpcnf):
 def console_stdout(res):  devnull=[mconsole(f"{line}") for line in res['stdout']]
 def console_stderr(res):  devnull=[mconsole(f"{line}",level="ERROR") for line in res['stderr']]
 
-
-
-
-
 ''' Graveyard '''
 
-# class XMLCombiner(object):
-#     def __init__(self, filenames):
-#         assert len(filenames) > 0, 'No filenames!'
-#         self.fnames = filenames
-#         eT.register_namespace('', NAMESPACE)
-#         # save all the roots, in order, to be processed later
-#         self.trees = [eT.parse(f) for f in filenames]
-#         self.roots = [t.getroot() for t in self.trees]
-#
-#     def combine(self):
-#         rootcoordinate = self.roots[0].findall(".//{"+NAMESPACE+"}coordinates")
-#         for ii,r in enumerate(self.trees[1:]):
-#             print(f"{ii} {os.path.basename(self.fnames[ii])} {r}")
-#             othercoordinate = r.findall(".//{"+NAMESPACE+"}coordinates")
-#             # try:
-#             newcoordinate = str(rootcoordinate[0].text) + str(othercoordinate[0].text)
-#             filtered = "\n".join([ll.rstrip() for ll in newcoordinate.splitlines() if ll.strip()])
-#             rootcoordinate[0].text = str(filtered)
-#             self.trees[0].write(OUTPUT_FILENAME)
-#             # except:
 if __name__ == '__main__': main()
