@@ -32,7 +32,7 @@ TMP = True
 
 OUTPUT_FILENAME = "MadeOutput.kml"
 TOUTPUT_FILENAME = "MadeOutput.csv"
-KMLTEMPLATEFN = "kmltemplate.kml"
+KMLTEMPLATEFN = "kml.template"
 DFTEMPLATEFN = "pdtemplate.csv"
 NAMESPACE = "http://earth.google.com/kml/2.1"
 cnf = initConfig()
