@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<kml xmlns="http://earth.google.com/kml/2.1"><Folder>
+<Placemark><name>TBD</name>
+<ExtendedData>
+<Data name="TECHNOLOGY"><value>TBD</value></Data>
+<Data name="RSRP"><value>TBD</value></Data>
+<Data name="SPEED"><value>TBD</value></Data>
+<Data name="ALTITUDE"><value>TBD</value></Data>
+<Data name="TIME"><value>TBD</value></Data>
+<Data name="OPERATOR"><value>TBD</value></Data>
+<Data name="PINGTIME"><value>TBD</value></Data>
+</ExtendedData>
+<Style>
+<LabelStyle><scale>1.0</scale></LabelStyle>
+<IconStyle><color>FFF07800</color><scale>1.0</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/shaded_dot.png</href></Icon></IconStyle>
+</Style><Point><coordinates>TBD,TBD,0</coordinates></Point>
+</Placemark>
+</Folder></kml>
