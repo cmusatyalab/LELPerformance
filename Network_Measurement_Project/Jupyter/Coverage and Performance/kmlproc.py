@@ -47,20 +47,29 @@ def main():
         DATADIR="/home/jblake1/Downloads/Network_Measurements"
     else:
         DATADIR="P:\\My Drive\\CMU-LEL\\Mill19\\Coverage and Performance"
-        EXPDIR=os.path.join(*[DATADIR,"2024-10-10-Mill19-Testing","LEL-UE1"])
+        EXPDIR=os.path.join(*[DATADIR,"2024-10-24-PTC-Testing","LEL-UE1"])
         filename = 'MadeOutput' + "_".join(EXPDIR.split("\\")[-2:]) + '.kml'
     DIRCHECKLIST=[DATADIR,EXPDIR]
     for DIR in DIRCHECKLIST:
         mconsole(f"{DIR} exists") if os.path.isdir(DIR) else print(f"{DIR} does not exist")
+        
+    tpc = TermexPingCombiner()
+    tpc.findFiles(EXPDIR)
+    tpc.combine()
+    
     kc = KMLCombiner()
     # kc.setFiles(rxlevfiles)
     kc.findFiles(EXPDIR)
     kc.combine(ftype='merge')
+    kc.addTermuxPing(tpc.getResult())
     kc.inflate()
     kc.labelsOn()
     kc.filter(filterin = True, filtervalue="314737")
     kc.filter(filterin = True, filtername="PHONE STATE", filtervalue="D")
-    tdfx = kc.kmlToDF(filename="tmp.csv")
+    # tdfx = kc.kmlToDF()
+    # ax=None
+    # histplot(tdfx[tdfx.PINGTIME < 100].PINGTIME,ax=ax,tabon=True,saveon=True,bins=100)
+    # kc.genHistogram()
     kc.writeKMLFile(filename=filename)
     # kmltask = kwargs['kmltask']
     # kmlc = KMLCombiner()
@@ -125,6 +134,7 @@ class KMLCombiner(object):
                 mconsole(f"Number of Placemarks: {len(retdict['kml']['Folder']['Placemark'])}")
             self.kresult = retdict
             # return retdict
+        # Deprecate G-NetTrack Lite data
         if ftype == 'merge' or ftype == "txt":
             ''' Turn the txt files into dataframe '''
             fdatalst = []
@@ -229,17 +239,34 @@ class KMLCombiner(object):
         self.kresult = kmldict
         return kmldict
     
+    
     def replaceExtendedData(self,extdatalst,kmldict = None):
         ''' Replaces the ExtendedData dictionaries with the contents of extdatalst '''
         kmldict = kmldict if kmldict is not None else self.kresult
         newpmlst = []
         for ii, pm in enumerate(kmldict['kml']['Folder']['Placemark']):
-            pm['ExtendedData']['Data'] = extdatalst[ii]
+            if(ii < len(extdatalst)):
+                pm['ExtendedData']['Data'] = extdatalst[ii]
             newpmlst.append(pm)
         kmldict['kml']['Folder']['Placemark'] = newpmlst
         self.kresult = kmldict
         return kmldict
-
+    
+    def addTermuxPing(self,presult,threshold = '10 seconds'):
+        tdfy = pd.DataFrame(self.kresult['kml']['Folder']['Placemark'])
+        tdfy['TIMESTAMP'] = tdfy.ExtendedData.map(lambda xx: self.getDataKeyValueDF('TIME',xx))
+        tdfy = to_ts(tdfy,format = '%Y.%m.%d_%H.%M.%S',origtz = "US/Eastern", newtz="US/Eastern")
+        tdfx = presult.copy()
+        tdfz = pd.merge_asof( tdfy.copy().sort_values('TIMESTAMP'),tdfx.copy().sort_values('TIMESTAMP'), on='TIMESTAMP',direction='nearest').copy()
+        ''' Get rid of datapoints where last ping was too time distant from network measurement '''
+        tdfz['DELTATS'] = tdfz.TIMESTAMP-tdfz.PINGTS
+        tdfz = tdfz[tdfz.DELTATS < pd.Timedelta(threshold)]
+        tdfz = tdfz.apply(self.addDataKeyValue,axis=1, inkey="PINGTIME")
+        tdfz = tdfz.apply(self.addDataKeyValue,axis=1, inkey="DELTATS")
+        newdatalst = list(tdfz.ExtendedData.map(lambda xx: xx['Data']))
+        self.replaceExtendedData(newdatalst)
+        return
+    
     def getDataKeyValue(self,key,kmldict=None):
         ''' Returns 1-column DataFrame with the values for the key '''
         kmldict = kmldict if kmldict is not None else self.kresult
@@ -338,6 +365,64 @@ class KMLCombiner(object):
                     f.write(xmltodict.unparse(filedata))
         elif ftype == 'txt':
             writejoin(filedata.set_index(filedata.columns[0],TOUUTPUT_FILENAME))
+            
+    # def genHistogram(self,key="PINGTIME"):
+    #     title="Termux Ping Logs"
+    #     ax=None
+    #     tdfx = self.kmlToDF()
+    #     histplot(tdfx.PINGTIME,ax=ax,tabon=False, title=title,saveon=True,bins=100,by=key)
+            
+class TermexPingCombiner(object):
+    def __init__(self):
+        self.pnames = None
+        self.presult = None
+        self.PRO = PRO
+    
+    def setFiles(self, filenames):  self.pnames = filenames
+        
+    def getFiles(self): return self.pnames
+    
+    def getResult(self): return self.presult
+    
+    def findFiles(self,rootdir):
+        ''' Basic File Selection '''
+        ffnlst = walkDir(rootdir)
+        pingfiles =  [fn for fn in ffnlst if os.path.basename(fn).startswith("ping")]
+        pingfiles.sort()
+        self.setFiles(pingfiles)
+    
+    def combine(self,pingfiles = None):
+        pingfiles = pingfiles if pingfiles != None else self.pnames
+        ''' Combine Ping Files '''
+        tdft = pd.DataFrame(pingfiles,columns=['FFN'])
+        tdft['FILEDATA'] = tdft.FFN.map(self.readFile)
+        columns = ["PINGTIMES"]
+        tdfx = pd.DataFrame(columns = columns)
+        for fdata in list(tdft.FILEDATA):
+            sdata = [dline.strip("\n") for dline in fdata[1:]]
+            tdfy = pd.DataFrame(sdata,columns = columns)
+            tdfx = pd.concat([tdfx, tdfy],axis=0)
+        tdfx[['LTIMESTAMP','PINGTIME']] = tdfx.apply(self.parseTMXPingLine,axis=1,result_type='expand')
+        tdfx['TIMESTAMP'] = pd.to_datetime(tdfx['LTIMESTAMP'], unit='s')
+        tdfx['TIMESTAMP'] = tdfx['TIMESTAMP'].dt.tz_localize('UTC').dt.tz_convert('US/Eastern')
+        tdfx = tdfx[['TIMESTAMP','PINGTIME']]
+        tdfx['PINGTS'] = tdfx.TIMESTAMP
+        self.presult = tdfx
+        
+    def parseTMXPingLine(self,row):
+        text = row.PINGTIMES
+        matchts = r"\[(.*?)\].*"
+        matchpt = r".*time=(.*?) ms.*"
+        return [float(re.sub(matchts, r'\1', text)),float(re.sub(matchpt, r'\1', text))]
+     
+    def readFile(self,fn,prepend = False):
+        lines = []
+        with open(fn,"r") as f:
+            lines = f.readlines()
+        if prepend:
+            fnlabel = os.path.basename(fn).replace(".txt","")
+            lines = [f"{fnlabel}\t{line}" for line in lines]
+        return lines   
                 
 def cmdOptions(tmpcnf):
     parser = OptionParser(usage="usage: %prog [options]")
@@ -353,6 +438,31 @@ def cmdOptions(tmpcnf):
 
 def console_stdout(res):  devnull=[mconsole(f"{line}") for line in res['stdout']]
 def console_stderr(res):  devnull=[mconsole(f"{line}",level="ERROR") for line in res['stderr']]
+
+def histplot(dfin,title='Unknown Title',ax=None,filename='tmp.png', 
+    figsize=(5,5), xlabel='',ylabel='',tabon=True, saveon=False,legend=False,
+    bins=10, alpha=0.5, fontsize = 15, yticks = True,
+    tabfontsize = 30, tabsizex = 1,tabsizey=2,**kwargs):
+    font = {'size':fontsize}
+    matplotlib.rc('font',**font)
+    df = pd.DataFrame(dfin) # in case actually a series
+    ''' Parameters '''
+    if ax is None:
+        ax = plt.figure(figsize=figsize).add_subplot(111)
+    ''' Plot '''
+    ax = df.plot.hist(bins=bins,alpha=alpha,title=title,figsize=figsize,ax=ax,legend=legend,**kwargs)
+    ax.set_xlabel(xlabel)
+    if not yticks: ax.set_yticklabels([])
+    # print(tabon)
+    if tabon:
+        tabcolWidths = [0.2]
+        tab = table(ax,np.round(df.describe(),2),loc='upper right',colWidths=tabcolWidths)
+        tab.set_fontsize(tabfontsize)
+        tab.scale(tabsizex,tabsizey)
+    if saveon:
+        print("Saving %s" % filename)
+        savePlot(ax,filename)
+    return ax
 
 ''' Graveyard '''
 
