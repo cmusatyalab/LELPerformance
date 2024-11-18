@@ -1,5 +1,31 @@
 /.project
 /.pydevproject
+*.png
+*.log
 processing/laptop_measure.log
 /.pydevproject.bak
-*.pyc
+/Network_Measurement_Project/.ipynb_checkpoints
+/Network_Measurement_Project/Jupyter/.ipynb_checkpoints
+Network_Measurement_Project/Jupyter/tmp-5g-cbrs.csv
+Network_Measurement_Project/Jupyter/tmp.csv
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/tmp-checkpoint.csv
+Network_Measurement_Project/Jupyter/Coverage and Performance/tmp-edited.csv
+Network_Measurement_Project/Jupyter/Coverage and Performance/tmp.csv
+Network_Measurement_Project/__pycache__/config.cpython-38.pyc
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-09-18-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-09-10-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/MergedOutput.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/MadeOutput.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-10-03-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/2024-10-3-MergedOutput.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/MadeOutput2024-10-03-JMA-Testing_PXL4-UE1.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-10-04-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/__pycache__/kmlmaker.cpython-38.pyc
+Network_Measurement_Project/Jupyter/Coverage and Performance/__pycache__/kmlproc.cpython-38.pyc
+Network_Measurement_Project/Jupyter/Coverage and Performance/MadeOutput_2024-10-03.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/MadeOutput_2024-10-04.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/Outdoor Coverage 2024-10-04.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/tmp.kml
+Network_Measurement_Project/Jupyter/Coverage and Performance/.ipynb_checkpoints/Outdoor Coverage 2024-10-10-checkpoint.ipynb
+Network_Measurement_Project/Jupyter/Coverage and Performance/tmp-jupyter.csv
