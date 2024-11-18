@@ -1,23 +1,20 @@
 #!/bin/bash
-test -z "$1" && NS="CBRS" || NS="$1"
+test -z "$1" && NS="LOCAL" || NS="$1"
+test -z "$2" && IFC="eno2" || IFC="$2"
+test -z "$3" && IP="128.2.208.222"  || IP="$3"
+test -z "$4" && GW="128.2.208.1"  || GW="$4"
 
-if [ "$NS" == "CBRS" ]
-then
-	NS=CBRS
-	IFC=enx0016083656d3
-	IP=192.168.128.88
-	GW=$IP
-else
-	NS=TMOB
-	IFC=enx0050b623c78d
-	IP=192.168.0.57
-	GW=$IP
-fi
-# sudo ip netns del ${NS}
+IPMTCHR='((1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])\.){3}(1?[0-9][0-9]?|2[0-4][0-9]|25[0-5])'
+GW=$(ip r|grep $IP|grep -oE "default via $IPMTCHR"|sed 's/default via //')
+GW=$4
+
+echo Adding NS=$NS IFC=$IFC IP=$IP GW=$GW
+# GW=$IP
+
 sudo ip netns add ${NS}                                                                              
 sudo ip link set dev ${IFC} netns ${NS}                                                     
 sudo ip -n ${NS} link set dev ${IFC} up
-sudo ip -n ${NS} addr add ${IP} dev ${IFC}
+sudo ip -n ${NS} addr add ${IP}/24 dev ${IFC}
 sudo ip netns exec ${NS} sysctl net.ipv4.ip_forward=1
 sudo ip netns exec ${NS} sysctl net.ipv4.conf.${IFC}.forwarding=1
 sudo ip netns exec ${NS} iptables -t nat -A POSTROUTING -s ${IP} -j MASQUERADE
