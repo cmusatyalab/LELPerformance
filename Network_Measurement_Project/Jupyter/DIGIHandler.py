@@ -11,6 +11,7 @@ import requests
 import getpass
 from requests import Response
 from time import sleep
+from base64 import b64encode
 
 sys.path.append("../../lib")
 print(sys.path)
@@ -24,17 +25,25 @@ DIGIIFC="enx0050b623c78d"
 TIMEOUTCT=40
 TIMEOUTWT=10
 simdict = {'2':"Living Edge Lab",'1':"T-Mobile"}
+remotemgrurl="https://remotemanager.digi.com/ws/v1/"
 
 def main():
-    dh = DIGIHandler()
-    # dh.getModemStatus(output=True)
-    dh.toggleSIM()
-    dh.waitForConnect()
+    # dh = DIGIHandler(pw="Cmu5@ty@l@60")
+    # # dh.getModemStatus(output=True)
+    # dh.toggleSIM()
+    # dh.waitForConnect()
+    
+    dah = DIGIAPIHandler(user="jblake1@andrew.cmu.edu", pw="Cmu5@ty@l@60")
+    # dah.setAuthentication()
+    # dah.query("devices/inventory")
+    inventory = dah.getInventory()
+    dah.parseInventory(inventory)
 
 
 class DIGIHandler(object):
-    def __init__(self):
-        self.DIGIPW = None
+    ''' For Digi local command line access '''
+    def __init__(self,pw=None):
+        self.DIGIPW = pw
         return
 
     def runDIGIcmd(self,icmd, output = True):
@@ -76,9 +85,9 @@ class DIGIHandler(object):
             if output: print(data)
         return modemstat,stdoutclean
     
-    def toggleSIM(self):
+    def toggleSIM(self,output=False):
         ''' Toggle the current SIM: SIM1=T-Mobile SIM2=LEL '''
-        res = self.runDIGIcmd(DIGI_TESTCMD,output=False)
+        res = self.runDIGIcmd(DIGI_TESTCMD,output=output)
         curSIM = res['stdout'][0]
         newSIM = '1' if curSIM == '2' else '2'
         print(f"Changing SIM {curSIM} to SIM {newSIM} -- {simdict[newSIM]}")
@@ -112,7 +121,7 @@ class DIGIHandler(object):
             return "UNKNOWN"
         
     def getCurrentSIM(self,output=False):
-        res = self.runDIGIcmd("config network modem wwan1 sim_slot",output=False)
+        res = self.runDIGIcmd("config network modem wwan1 sim_slot",output=output)
         curSIM = res['stdout'][0]
         curSIMName = self.getSIMName(curSIM)
         if output: print(f"Current SIM: {curSIM} {curSIMName}")
@@ -122,13 +131,86 @@ class DIGIHandler(object):
         if inpw is not None:
             self.DIGIPW=inpw
             return
-        pw = input("Enter your DIGI gateway command line password")
+        pw = input("Enter your DIGI gateway command line password: ")
         if pw is not None:
             self.DIGIPW = pw
         else:
             print("Password not updated")
             
         
+
+class DIGIAPIHandler(object):
+    ''' For Remote Manager Access API '''
+    def __init__(self,user=None, pw=None,digiauth=None):
+        self.DIGIPW = pw
+        self.DIGIUSER = user
+        self.DIGIAUTH=digiauth
+        self.dev0 = None # Assuming only one DIGI for now
+        return
+    
+    def getInventory(self):
+        return self.query("devices/inventory")
+    
+    def parseInventory(self,jinventory):
+        if jinventory['count'] > 0:
+            if len(jinventory['list']) > 0:
+                dev0 = jinventory['list'][0]
+                if len(jinventory['list']) > 1:
+                    print(f"Ignoring devices:")
+                    _ = [print(f"\t{dev['name']}" for dev in jinventory['list'][1:])]
+                
+                self.parseDev(dev0)
+        pass
+    def parseDev(self,jdevicedata):
+        self.dev0 = self.DIGIDevice(self,jdevicedata = jdevicedata)
         
+        pass
+    
+    def setAuthentication(self,user=None, pw = None,):
+        if self.DIGIAUTH != None:
+            update = input(f"Update authorization: {self.DIGIAUTH}? [Y/n]: ")
+            if update != "Y":
+                print("Not updating")
+                return            
+        if user is None: user = input("Enter your DIGI Remote Manager username: ")
+        self.DIGIUSER = user
+        if pw is None: pw = input("Enter your DIGI Remote Manager password: ")
+        self.DIGIPW = pw
+        b64 = b64encode(f"{login}:{pw}".encode('utf-8'))
+        self.DIGIAUTH = f"Authorization: Basic {b64}"
+    
+    def query(self,qry,qtype='requests'):
+        joutput = None
+        if qtype != 'requests':
+            cmd = f"curl -H \'{self.DIGIAUTH}\' {remotemgrurl}/{qry}"
+            resp = cmd_all(cmd, output=False)
+            joutput = json.loads(resp['stdout'][0])
+        else:
+            r = requests.get(f"{remotemgrurl}/{qry}", auth=(self.DIGIUSER,self.DIGIPW))
+            joutput = r.json()
+        # print(joutput)
+        return joutput
+        
+    class DIGIDevice(object):
+        def __init__(self,parent,jdevicedata=None):
+            self.jdevicedata = jdevicedata
+            self.id = jdevicedata['id']
+            self.currsim = None
+            self.parent = parent
+            # self.inventory = None
+            # self.getInventory()
+            
+        def getInventory(self):
+            self.inventory = self.parent.query(f"devices/inventory/{self.id}")
+            
+        def getSettings(self):
+            self.inventory = self.parent.query(f"devices/inventory/{self.id}")
+            
+        def getCurrentSIM(self):
+            pass
+            
+            
+        
+
 
 if __name__ == '__main__': main()
