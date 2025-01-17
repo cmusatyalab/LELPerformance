@@ -28,18 +28,34 @@ TIMEOUTWT=10
 simdict = {'2':"Living Edge Lab",'1':"T-Mobile"}
 remotemgrurl="https://remotemanager.digi.com/ws/v1/"
 
-
+''' 
+    This file contains two different API interfaces
+    
+    DIGIHandler uses the DIGI command line interface locally on the device to
+    manipulate the device. This can only be accessed through a local client connected to the DIGI.
+    
+    DIGIAPIHandler uses the DIGI Remote Manager API to access the DIGI device. 
+    It works from anywhere when the device is accessible by the Remote Manager. 
+    API user must have a Remote Manager Login.
+    
+    A third interface, the local device API is not yet implemented.
+    
+'''
+     
 def main():
     # # dh.getModemStatus(output=True)
     # dh.toggleSIM()
     # dh.waitForConnect()
-    
-    dah = DIGIAPIHandler(user="<USER>", pw="<PW>")
+    digicred = "../../../digicred.json"
+    with open(digicred) as f: cred = json.load(f)
+
+    dah = DIGIAPIHandler(user=cred['user'], pw=cred['pw'])
     # dah.setAuthentication()
     # dah.query("devices/inventory")
     inventory = dah.getInventory()
     dah.parseInventory(inventory)
     dah.getCurrentSIM()
+    dah.toggleSIM()
 
     pass
 
@@ -183,6 +199,16 @@ class DIGIAPIHandler(object):
 
     def getCurrentSIM(self):
         sim = self.dev0.getCurrentSIM()
+        
+    def setCurrentSIM(self,simvalue):
+        self.dev0.setCurrentSIM(simvalue=simvalue)
+        
+    def toggleSIM(self):
+        sim = self.getCurrentSIM()
+        newsim = "_1" if sim == "_2" else "_1"
+        print(f"Toggle sim from {sim} to {newsim}")
+        self.setCurrentSIM(simvalue=newsim)
+        
     
     def setAuthentication(self,user=None, pw = None,):
         if self.DIGIAUTH != None:
@@ -199,11 +225,6 @@ class DIGIAPIHandler(object):
     
     def query(self,qry,qtype='requests'):
         joutput = None
-        # if qtype != 'requests':
-        #     cmd = f"curl -H \'{self.DIGIAUTH}\' {remotemgrurl}/{qry}"
-        #     resp = cmd_all(cmd, output=False)
-        #     joutput = json.loads(resp['stdout'][0])
-        # else:
         r = requests.get(f"{remotemgrurl}/{qry}", auth=(self.DIGIUSER,self.DIGIPW))
         joutput = r.json()
         return joutput
