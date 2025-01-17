@@ -47,9 +47,13 @@ def exceldt2datetime(fdate):
     rettime = (temp+delta).replace(microsecond=0)
     return rettime
 
-def to_ts(df,fmt):
-    import pandas as pd
-    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'],format=fmt,errors='coerce')
+def to_ts(df,col='TIMESTAMP', fmt=None, origtz=None, newtz=None,**kwargs):
+    if 'fmt' in kwargs: format = kwargs['fmt'] # deprecated option
+    df[col] = pd.to_datetime(df[col],errors='coerce',**kwargs)
+    if not origtz is None:
+        df[col] = df[col].dt.tz_localize(pytz.timezone(origtz))
+    if not newtz is None:
+        df[col] = df[col].dt.tz_convert(pytz.timezone(newtz))    
     return df
 
 def to_ts_dh(df,dcol,hcol,fmt="%m/%d/%Y %H:%M"):

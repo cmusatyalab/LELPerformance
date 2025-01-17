@@ -1,0 +1,9 @@
+<sci_request version="1.0">
+   <send_message>
+      <targets><device id="00000000-00000000-0004F3FF-FF94F583"/></targets>
+      <rci_request version='1.1'>
+		  <query_setting>
+		  </query_setting>
+	  </rci_request>
+   </send_message>
+</sci_request>

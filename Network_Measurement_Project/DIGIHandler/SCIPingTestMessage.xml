@@ -1,0 +1,7 @@
+<sci_request version="1.0">
+    <ping>
+       <targets>
+          <device id="00000000-00000000-0004F3FF-FF94F583"/>        
+       </targets>
+    </ping>
+</sci_request>
