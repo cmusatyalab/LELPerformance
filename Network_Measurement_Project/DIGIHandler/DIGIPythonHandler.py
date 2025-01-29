@@ -3,6 +3,9 @@ import sys
 import subprocess
 import shutil
 from time import sleep
+from jinja2 import Environment, FileSystemLoader
+from pprint import pprint
+import json
 
 from digidevice import cli
 from digidevice import config
@@ -10,7 +13,7 @@ from digidevice import config
 TIMEOUTCT=40
 TIMEOUTWT=10
 simdict = {'2':"Living Edge Lab",'1':"T-Mobile"}
-# remotemgrurl="https://remotemanager.digi.com/ws/v1/"
+localcfgfile = "configfile.txt"
 
 '''
     
@@ -21,20 +24,24 @@ simdict = {'2':"Living Edge Lab",'1':"T-Mobile"}
 '''
      
 def main():
+    print(cmd_all("ls"))
     dh = DIGIPythonHandler()
-    dh.getCurrentSIM(output=False, debug=False)    
+    dh.pingTest()
+    dh.getDIGIconfig()
+    dh.getCurrentSIM(output=True, debug=False)    
     dh.getModemStatus(output=False, debug=False)
-    dh.toggleSIM(output=False)
+    # dh.toggleSIM(output=False)
     dh.waitForConnect(output=False)
+    dh.pingTest()
     pass
 
 
 class DIGIPythonHandler(object):
     ''' For Digi local command line access '''
     def __init__(self,pw=None, user = None, mode = None):
-        self.DIGIPW = pw
-        self.DIGIUSER = user
-        self.mode = mode
+        # self.DIGIPW = pw
+        # self.DIGIUSER = user
+        # self.mode = mode
         return
 
     def runDIGIcmd(self,icmd, output = True,debug=False):
@@ -45,6 +52,13 @@ class DIGIPythonHandler(object):
         outp['stdout'] = cli.execute(icmd).split("\n")
         outp['stderr'] = [""]
         return outp
+    
+    def getDIGIvalue(self,key,output = True,debug=False):
+        ''' Get a parameter value on the DIGI Gateway '''
+        cfg = config.load()
+        value = cfg.get(key)
+        if output: print(f"key={key} value={value}")
+        return value 
 
     def setDIGIvalue(self,key,value, output = True,debug=False):
         ''' set a parameter value on the DIGI Gateway '''
@@ -62,7 +76,31 @@ class DIGIPythonHandler(object):
         cfg = config.load()
         value = cfg.get(key)
         if output: print(f"key={key} value={value}")
-        return value        
+        return value
+    
+    def getDIGIconfig(self,output = True,debug=False,save=False):
+        cfg = config.load()
+        cfglines = cfg.dump().splitlines()
+        if output: pprint(cfglines)
+        if save:
+            cfglines = [line + '\n' for line in cfglines]
+            with open(localcfgfile,"w") as f:
+                f.writelines(cfglines)
+        return cfg
+    
+    def searchDIGIconfig(self,searchstr,output=False):
+        cfg = config.load()
+        cfglines = cfg.dump().splitlines()
+        matchlines = [line for line in cfglines if searchstr in line]
+        if output: pprint(matchlines)
+        return matchlines   
+        
+    def getDIGIsystem(self,output = True,debug=False, verbose = True):
+        cmd = "show system"
+        if verbose: cmd = cmd + " verbose"
+        outp = self.runDIGIcmd(cmd,output=output,debug=debug)
+        if output: pprint(outp)
+        return outp
     
     def getModemStatus(self,output=True,debug = False):
         ''' Get (and parse) the WWAN1 Modem Status '''
@@ -108,8 +146,8 @@ class DIGIPythonHandler(object):
         sleep(5)
         
     
-    def waitForConnect(self,output=True):
-        for ii in range(0,TIMEOUTCT):
+    def waitForConnect(self,output=True,timeoutct = TIMEOUTCT, timeoutwt = TIMEOUTWT):
+        for ii in range(0,timeoutct):
             mstat, output = self.getModemStatus(output=False)
             nonstatelst = ['not_connected','not_found','disabled','enabling','disabling',
                            'unknown','no_signal','registered','connecting']
@@ -118,10 +156,12 @@ class DIGIPythonHandler(object):
                 break
             else:
                 print(f"{ii} {humandatenow()} {mstat}:{output[-1]}:{self.getCurrentSIM()[-1]}")
-            sleep(TIMEOUTWT)
+            sleep(timeoutwt)
+        connected = True if ii < timeoutct else False
+        return connected
     
     def pingTest(self, dest="8.8.8.8", c=1, output=True):
-        cmd=f"ping -c {c} -I {DIGIIFC} {dest}"
+        cmd=f"ping -c {c} {dest}"
 #         print(cmd)
         res =  cmd_all(cmd)
         if output and 'stdout' in res:
@@ -141,9 +181,29 @@ class DIGIPythonHandler(object):
         if output: print(f"Current SIM: {curSIM} {curSIMName}")
         return curSIM, curSIMName
 
+
+''' Utilities '''
 import datetime
+import shlex, subprocess
+from subprocess import PIPE
+
 def humandatenow():
     retstr = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S-%f')
     return retstr
-     
+
+
+def cmd_all(cmdstr,output=False):
+    args = shlex.split(cmdstr)
+    procdata = subprocess.run(args,stdout=PIPE,stderr=PIPE)
+    stdout = procdata.stdout.decode('utf-8').split('\n')
+    stderr = procdata.stderr.decode('utf-8').split('\n')    
+    stderr = [line for line in stderr if line != ""]
+    
+    if output:
+        print("STDOUT")
+        prtlines(stdout)
+        print("STDERR")
+        prtlines(stderr)
+    return {'stdout':stdout,'stderr':stderr }
+
 if __name__ == '__main__': main()

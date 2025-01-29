@@ -49,6 +49,7 @@ def main():
     digicred = "../../../digicred.json"
     with open(digicred) as f: cred = json.load(f)
 
+    dh = DIGIHandler(user=cred['user'], pw=cred['pw'], mode = "DIGIDEVICE")
     dah = DIGIAPIHandler(user=cred['user'], pw=cred['pw'])
     # dah.setAuthentication()
     # dah.query("devices/inventory")
@@ -62,17 +63,24 @@ def main():
 
 class DIGIHandler(object):
     ''' For Digi local command line access '''
-    def __init__(self,pw=None):
+    def __init__(self,pw=None, user = None, mode = None):
         self.DIGIPW = pw
+        self.DIGIUSER = user
+        self.mode = mode
+        if mode == "DIGIDEVICE":
+            from digidevice import cli
         return
 
     def runDIGIcmd(self,icmd, output = True):
         ''' Run a command line command on the DIGI Gateway '''
-        if self.DIGIPW is None: self.setPassword()
-        basecmd = f"sshpass -p {self.DIGIPW} ssh admin@{DIGIIP}"
-        cmd=f"{basecmd} {DIGI_TESTCMD}"
-        cmd=f"{basecmd} {icmd}"
-        return cmd_all(cmd, output=output)
+        if self.mode != "DIGIDEVICE": # from host
+            if self.DIGIPW is None: self.setPassword()
+            basecmd = f"sshpass -p {self.DIGIPW} ssh admin@{DIGIIP}"
+            cmd=f"{basecmd} {DIGI_TESTCMD}"
+            cmd=f"{basecmd} {icmd}"
+            return cmd_all(cmd, output=output)
+        # else: # from device
+            
     
     def getModemStatus(self,output=True):
         ''' Get (and parse) the WWAN1 Modem Status '''
