@@ -2,18 +2,20 @@ import os
 import sys
 import subprocess
 import shutil
-from time import sleep
+from time import sleep, time
 from jinja2 import Environment, FileSystemLoader
 from pprint import pprint
 import json
 
 from digidevice import cli
 from digidevice import config
+from digidevice import datapoint
 
 TIMEOUTCT=40
 TIMEOUTWT=10
 simdict = {'2':"Living Edge Lab",'1':"T-Mobile"}
 localcfgfile = "configfile.txt"
+DEFAULT_DATAPOINT_TAG = "LELMonitor"
 
 '''
     
@@ -39,6 +41,7 @@ def main():
 class DIGIPythonHandler(object):
     ''' For Digi local command line access '''
     def __init__(self,pw=None, user = None, mode = None):
+        self.datapoint_tag = DEFAULT_DATAPOINT_TAG
         # self.DIGIPW = pw
         # self.DIGIUSER = user
         # self.mode = mode
@@ -93,7 +96,12 @@ class DIGIPythonHandler(object):
         cfglines = cfg.dump().splitlines()
         matchlines = [line for line in cfglines if searchstr in line]
         if output: pprint(matchlines)
-        return matchlines   
+        return matchlines
+    
+    def sendDIGIdatapoint(self,stream = "Test", value = 0, units = "NA", timestamp = None, geo_location = (0,0,0), description = "NA", quality = -1):
+        if timestamp is None: timestamp = time()
+        stream = f"{self.datapoint_tag}/{stream}"
+        datapoint.upload(stream, value, units=units, timestamp=timestamp, geo_location=geo_location, description=description, quality=quality)
         
     def getDIGIsystem(self,output = True,debug=False, verbose = True):
         cmd = "show system"
@@ -129,16 +137,16 @@ class DIGIPythonHandler(object):
             try:
                 modemstat = f"{data[3]}_SIM:{data[1]}_DBM:{dbm}"
             except:
-                print(data)
+                if output: print(data)
                 modemstat = "unknown"
             if output: print(f"{modemstat} {data}")
         return modemstat,stdoutclean
     
-    def toggleSIM(self,output=True,debug = False):
+    def toggleSIM(self,output=False,debug = False):
         SIMSLOTSETTING="network.modem.wwan1.sim_slot"        
         # sim_slot,_ = self.getCurrentSIM(output=output,debug=debug)
         sim_slot = self.getDIGIvalue(SIMSLOTSETTING)
-        if output: print(f"Sim slot is {sim_slot} {type(sim_slot)}")
+        if output: print(f"Sim slot is {sim_slot}")
         nsim_slot = "2" if sim_slot == "1" else "1"
         self.setDIGIvalue(SIMSLOTSETTING,nsim_slot)
         sim_slot,_ = self.getCurrentSIM(output=output,debug=debug)
@@ -147,15 +155,16 @@ class DIGIPythonHandler(object):
         
     
     def waitForConnect(self,output=True,timeoutct = TIMEOUTCT, timeoutwt = TIMEOUTWT):
+        print(f"Waiting through {timeoutct} attempts of {timeoutwt} seconds ")
         for ii in range(0,timeoutct):
             mstat, output = self.getModemStatus(output=False)
             nonstatelst = ['not_connected','not_found','disabled','enabling','disabling',
                            'unknown','no_signal','registered','connecting']
             if (mstat not in nonstatelst):
-                print(f"{ii} {humandatenow()} {mstat}:{output[-1]}:{self.getCurrentSIM()[-1]}")
+                if output: print(f"{ii} {humandatenow()} {mstat}:{output[-1]}:{self.getCurrentSIM()[-1]}")
                 break
             else:
-                print(f"{ii} {humandatenow()} {mstat}:{output[-1]}:{self.getCurrentSIM()[-1]}")
+                if output: print(f"{ii} {humandatenow()} {mstat}:{output[-1]}:{self.getCurrentSIM()[-1]}")
             sleep(timeoutwt)
         connected = True if ii < timeoutct else False
         return connected
@@ -180,7 +189,9 @@ class DIGIPythonHandler(object):
         curSIMName = self.getSIMName(curSIM)
         if output: print(f"Current SIM: {curSIM} {curSIMName}")
         return curSIM, curSIMName
-
+    
+    def setDataPointTag(self,dptag):
+        self.datapoint_tag = dptag
 
 ''' Utilities '''
 import datetime
